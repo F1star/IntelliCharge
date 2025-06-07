@@ -73,24 +73,15 @@ export const useLoginServer = defineStore("loginServer", () => {
         return res.data;
     };
 
-    /**
-     * 获取队列状态
-     * @returns {Promise<{status: boolean, msg: string, data: Object}>}
-     */
-    const getQueueStatus = async () => {
-        const res = await server.get("queue/status");
-        return res.data;
-    };
-
-    /**
-     * 加入等候队列
-     * @param {Object} queueData - 队列信息
+     /**
+     * 添加新车辆
+     * @param {Object} carData - 车辆信息
      * @returns {Promise<LoginResponse>}
      */
-    const joinQueue = async (queueData) => {
-        const res = await server.post("queue/join", {
+     const addCar = async (carData) => {
+        const res = await server.post("cars", {
             username: userStore.username,
-            ...queueData
+            car: carData
         });
         return res.data;
     };
@@ -100,7 +91,6 @@ export const useLoginServer = defineStore("loginServer", () => {
         register,
         changePassword,
         getUserCars,
-        getQueueStatus,
-        joinQueue
+        addCar
     };
 });

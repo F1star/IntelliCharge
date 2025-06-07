@@ -91,9 +91,12 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { message } from 'ant-design-vue'
 import { ReloadOutlined } from '@ant-design/icons-vue'
 import { useLoginServer } from './LoginSystem/server'
+import { useChargingServer } from './chargingSystem/server'
 import { mainStore } from '../store'
 
 const userStore = mainStore()
+const loginServer = useLoginServer()
+const chargingServer = useChargingServer()
 const loading = ref(false)
 const joinQueueVisible = ref(false)
 const queueFormRef = ref(null)
@@ -127,34 +130,8 @@ const selectedCar = computed(() => {
   return userCars.value.find(car => car.id === queueForm.carId)
 })
 
-const calculateChargingTime = computed(() => {
-  if (!queueForm.chargingAmount || !selectedCar.value) return 0
-  const power = queueForm.chargeType === 'F' ? 60 : 30 // 快充60kW，慢充30kW
-  return Math.ceil(queueForm.chargingAmount / power * 60)
-})
-
-const calculateWaitingTime = computed(() => {
-  if (!queueForm.chargingAmount || !selectedCar.value) return 0
-  const power = queueForm.chargeType === 'F' ? 60 : 30
-  const chargingTime = queueForm.chargingAmount / power * 60
-  
-  let waitingTime = 0
-  if (queueForm.chargeType === 'F') {
-    waitingTime = queueStatus.fast_queue.reduce((total, vehicle) => {
-      return total + vehicle.vehicle_info.charging_time
-    }, 0)
-  } else {
-    waitingTime = queueStatus.slow_queue.reduce((total, vehicle) => {
-      return total + vehicle.vehicle_info.charging_time
-    }, 0)
-  }
-  
-  return Math.ceil(waitingTime + chargingTime)
-})
-
 const fetchUserCars = async () => {
   try {
-    const loginServer = useLoginServer()
     const res = await loginServer.getUserCars()
     if (res.status) {
       userCars.value = res.data
@@ -167,8 +144,7 @@ const fetchUserCars = async () => {
 const refreshQueueStatus = async () => {
   try {
     loading.value = true
-    const loginServer = useLoginServer()
-    const res = await loginServer.getQueueStatus()
+    const res = await chargingServer.getQueueStatus()
     if (res.status) {
       Object.assign(queueStatus, res.data)
     } else {
@@ -204,13 +180,10 @@ const handleJoinQueue = async () => {
     await queueFormRef.value.validate()
     loading.value = true
     
-    const loginServer = useLoginServer()
-    const res = await loginServer.joinQueue({
+    const res = await chargingServer.joinQueue({
       carId: queueForm.carId,
       chargeType: queueForm.chargeType,
-      chargingAmount: queueForm.chargingAmount,
-      chargingPower: queueForm.chargeType === 'F' ? 60 : 30,
-      chargingTime: calculateChargingTime.value
+      chargingAmount: queueForm.chargingAmount
     })
     
     if (res.status) {

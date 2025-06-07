@@ -1,6 +1,6 @@
 import time
 from enum import Enum
-from typing import Dict, TypedDict, Any, Union, List
+from typing import Dict, TypedDict, Any, Union, List, Optional
 from datetime import datetime, time as dt_time
 from collections import deque
 
@@ -13,11 +13,12 @@ class ChargingStatus(Enum):
     OFFLINE = "离线"     # 离线状态
 
 # 定义充电账单的数据结构
-class ChargingBill(TypedDict):
+class ChargingBill(TypedDict, total=False):
     vehicle_id: str
     charging_duration: float
     energy_consumed: float
     cost: float
+    error: str
 
 # 定义错误响应的数据结构
 class ErrorResponse(TypedDict):
@@ -31,6 +32,7 @@ class ChargingPile:
         :param charging_category: 充电桩类型（F:快充, T:慢充）
         """
         self.pile_id = pile_id
+        self.charging_category = charging_category
         
         if charging_category == 'F':
             self.power = 30  # 单位：度/每小时
@@ -42,9 +44,9 @@ class ChargingPile:
         self.status = ChargingStatus.IDLE
         self.connected_vehicle = None
         self.start_time = None
-        self.total_energy_delivered = 0.0  # 累计充电量(度)
-        self.total_earnings = 0.0  # 累计收益(元)
-        self.charge_queue = deque(maxlen=2)  # 最多容纳2个车位的队列
+        self.total_energy_delivered = 0.0
+        self.total_earnings = 0.0
+        self.charge_queue = deque(maxlen=2)
 
         self.rate_periods = [
             # 谷时(0.4元/度): 23:00~次日7:00
@@ -80,6 +82,8 @@ class ChargingPile:
         # 如果充电桩空闲且队列不为空，开始充电
         if self.status == ChargingStatus.IDLE and len(self.charge_queue) > 0:
             return self.connect_vehicle(self.charge_queue[0])
+        
+        print(self.charge_queue)
         
         return f"车辆[{vehicle_id}]已加入充电桩[{self.pile_id}]的等待队列"
 
@@ -260,6 +264,51 @@ class ChargingPile:
             return self._get_current_rate(time.time())
         return self._get_current_rate(time.time())
     
+    def calculate_charging_time(self, charging_amount: float) -> float:
+        """
+        计算指定充电量所需的充电时间（小时）
+        :param charging_amount: 充电量（kWh）
+        :return: 充电时间（小时）
+        """
+        return charging_amount / self.power
+
+    def calculate_total_time(self, vehicle_info: dict) -> float:
+        """
+        计算指定车辆的总等待时间（包括队列中其他车辆的充电时间）
+        :param vehicle_info: 车辆信息
+        :return: 总等待时间（小时）
+        """
+        total_time = 0
+        # 计算队列中其他车辆的充电时间
+        for vehicle in self.charge_queue:
+            if vehicle != vehicle_info:
+                total_time += self.calculate_charging_time(vehicle['charging_amount'])
+        # 加上自己的充电时间
+        total_time += self.calculate_charging_time(vehicle_info['charging_amount'])
+        return total_time
+
+    def get_available_slots(self) -> int:
+        """
+        获取当前可用的充电位数量
+        :return: 可用充电位数量
+        """
+        maxlen = self.charge_queue.maxlen or 0
+        return maxlen - len(self.charge_queue)
+
+    def get_queue_info(self) -> dict:
+        """
+        获取队列信息，用于调度决策
+        :return: 队列信息字典
+        """
+        return {
+            'pile_id': self.pile_id,
+            'charging_category': self.charging_category,
+            'power': self.power,
+            'available_slots': self.get_available_slots(),
+            'queue_length': len(self.charge_queue),
+            'queue_vehicles': list(self.charge_queue)
+        }
+
 if __name__ == "__main__":
     # 创建充电桩实例（7.5kW功率）
     pile = ChargingPile("A", "T")
@@ -284,10 +333,12 @@ if __name__ == "__main__":
 
     # 停止充电并获取账单
     bill = pile.disconnect_vehicle()
-
-    print(f"充电账单: 时长={bill['charging_duration']}秒, "
-        f"电量={bill['energy_consumed']}度, "
-        f"费用={bill['cost']}元")
+    if isinstance(bill, dict) and 'error' not in bill:
+        print(f"充电账单: 时长={bill.get('charging_duration', 0)}秒, "
+              f"电量={bill.get('energy_consumed', 0)}度, "
+              f"费用={bill.get('cost', 0)}元")
+    else:
+        print(f"获取账单失败: {bill.get('error', '未知错误')}")
 
     # 查询当前电价（根据当前时间）
     current_rate = pile.get_current_rate()
