@@ -24,7 +24,7 @@ export default {
         console.log("login res", res);
         if (res.status === true) {
           message.success('Login successful!');
-          userStore.setUser(username.value);
+          userStore.setUser(username.value, res.role);
           router.push({ name: 'edit' });
         } else {
           message.error('Login failed. Please check your username and password.');

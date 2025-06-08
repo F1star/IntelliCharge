@@ -19,9 +19,6 @@
         <div v-if="activeSidebar === 'personal'" class="sidebar-content">
           <PersonalSidebar />
         </div>
-        <div v-if="activeSidebar === 'home'" class="sidebar-content">
-          <HomeSidebar />
-        </div>
         <div v-else :style="editorStyle">
           <HomeSidebar/>
         </div>

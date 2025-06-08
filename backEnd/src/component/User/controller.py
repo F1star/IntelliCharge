@@ -20,7 +20,7 @@ async def login():
     cursor = conn.cursor()
 
     try:
-        sql = "SELECT * FROM users WHERE username = %s"
+        sql = "SELECT id, username, password, isadmin FROM users WHERE username = %s"
         cursor.execute(sql, (user.username,))
         data = cursor.fetchone()
 
@@ -29,21 +29,25 @@ async def login():
             res = LoginResponse({
                 "status": False,
                 "msg": "login failed",
-                "token": ""
+                "token": "",
+                "role": "user"
             })
         else:
             print("login success")
+            is_admin = data[3] if len(data) > 3 else 0
             res = LoginResponse({
                 "status": True,
                 "msg": "login success",
-                "token": ""
+                "token": "",
+                "role": "admin" if is_admin == 1 else "user"
             })
     except Exception as e:
         print("Error during login:", e)
         res = LoginResponse({
             "status": False,
             "msg": "internal server error",
-            "token": ""
+            "token": "",
+            "role": "user"
         })
     finally:
         cursor.close()
@@ -73,21 +77,24 @@ async def register():
             res = LoginResponse({
                 "status": True,
                 "msg": "register successfully",
-                "token": ""
+                "token": "",
+                "role": "user"
             })
         else:
             print("register failed, username already exists")
             res = LoginResponse({
                 "status": False,
                 "msg": "register failed, username already exists",
-                "token": ""
+                "token": "",
+                "role": "user"
             })
     except Exception as e:
         print("Error during registration:", e)
         res = LoginResponse({
             "status": False,
             "msg": "internal server error",
-            "token": ""
+            "token": "",
+            "role": "user"
         })
     finally:
         cursor.close()
@@ -107,7 +114,8 @@ async def change_password():
         return jsonify(LoginResponse({
             "status": False,
             "msg": "参数不完整",
-            "token": ""
+            "token": "",
+            "role": "user"
         }))
 
     conn = pymysql.connect(host='127.0.0.1', port=3306, user='root', password='root', charset='utf8', database='pile')
@@ -124,7 +132,8 @@ async def change_password():
             return jsonify(LoginResponse({
                 "status": False,
                 "msg": "旧密码错误",
-                "token": ""
+                "token": "",
+                "role": "user"
             }))
 
         # 更新密码
@@ -135,7 +144,8 @@ async def change_password():
         return jsonify(LoginResponse({
             "status": True,
             "msg": "密码修改成功",
-            "token": ""
+            "token": "",
+            "role": "user"
         }))
 
     except Exception as e:
@@ -143,7 +153,8 @@ async def change_password():
         return jsonify(LoginResponse({
             "status": False,
             "msg": "内部服务器错误",
-            "token": ""
+            "token": "",
+            "role": "user"
         }))
     finally:
         cursor.close()
@@ -158,15 +169,16 @@ async def get_user_cars():
         return jsonify(LoginResponse({
             "status": False,
             "msg": "参数不完整",
-            "token": ""
+            "token": "",
+            "role": "user"
         }))
 
     conn = pymysql.connect(host='127.0.0.1', port=3306, user='root', password='root', charset='utf8', database='pile')
     cursor = conn.cursor()
 
     try:
-        # 获取用户ID
-        sql = "SELECT id FROM users WHERE username = %s"
+        # 获取用户ID和权限
+        sql = "SELECT id, isadmin FROM users WHERE username = %s"
         cursor.execute(sql, (username,))
         user_data = cursor.fetchone()
         
@@ -174,10 +186,12 @@ async def get_user_cars():
             return jsonify(LoginResponse({
                 "status": False,
                 "msg": "用户不存在",
-                "token": ""
+                "token": "",
+                "role": "user"
             }))
 
         user_id = user_data[0]
+        is_admin = user_data[1]
 
         # 获取用户的车辆列表
         sql = """
@@ -204,7 +218,8 @@ async def get_user_cars():
         return jsonify({
             "status": True,
             "msg": "获取成功",
-            "data": [Car.to_json(car) for car in cars]
+            "data": [Car.to_json(car) for car in cars],
+            "role": "admin" if is_admin == 1 else "user"
         })
 
     except Exception as e:
@@ -212,7 +227,8 @@ async def get_user_cars():
         return jsonify(LoginResponse({
             "status": False,
             "msg": "内部服务器错误",
-            "token": ""
+            "token": "",
+            "role": "user"
         }))
     finally:
         cursor.close()
@@ -229,15 +245,16 @@ async def add_car():
         return jsonify(LoginResponse({
             "status": False,
             "msg": "参数不完整",
-            "token": ""
+            "token": "",
+            "role": "user"
         }))
 
     conn = pymysql.connect(host='127.0.0.1', port=3306, user='root', password='root', charset='utf8', database='pile')
     cursor = conn.cursor()
 
     try:
-        # 获取用户ID
-        sql = "SELECT id FROM users WHERE username = %s"
+        # 获取用户ID和权限
+        sql = "SELECT id, isadmin FROM users WHERE username = %s"
         cursor.execute(sql, (username,))
         user_data = cursor.fetchone()
         
@@ -245,10 +262,12 @@ async def add_car():
             return jsonify(LoginResponse({
                 "status": False,
                 "msg": "用户不存在",
-                "token": ""
+                "token": "",
+                "role": "user"
             }))
 
         user_id = user_data[0]
+        is_admin = user_data[1]
 
         # 检查车牌号是否已存在
         sql = "SELECT id FROM cars WHERE plate_number = %s"
@@ -257,7 +276,8 @@ async def add_car():
             return jsonify(LoginResponse({
                 "status": False,
                 "msg": "该车牌号已存在",
-                "token": ""
+                "token": "",
+                "role": "admin" if is_admin == 1 else "user"
             }))
 
         # 添加新车辆
@@ -277,7 +297,8 @@ async def add_car():
         return jsonify(LoginResponse({
             "status": True,
             "msg": "添加成功",
-            "token": ""
+            "token": "",
+            "role": "admin" if is_admin == 1 else "user"
         }))
 
     except Exception as e:
@@ -285,7 +306,8 @@ async def add_car():
         return jsonify(LoginResponse({
             "status": False,
             "msg": "内部服务器错误",
-            "token": ""
+            "token": "",
+            "role": "user"
         }))
     finally:
         cursor.close()
