@@ -7,18 +7,25 @@ from ...dataStructure.ChargerPile import ChargingPile, ChargingStatus
 from ...dataStructure.Scheduler import Scheduler
 from flask_cors import CORS
 import time
+import sys
+import os
+from decimal import Decimal
+
+# 添加项目根目录到系统路径
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+from config.db_config import DB_CONFIG
 
 blueprint = Blueprint('server', __name__)
 
 def get_db_connection():
     """获取数据库连接"""
     return pymysql.connect(
-        host='127.0.0.1',
-        port=3306,
-        user='root',
-        password='root',
-        charset='utf8',
-        database='pile'
+        host=DB_CONFIG['host'],
+        port=DB_CONFIG['port'],
+        user=DB_CONFIG['user'],
+        password=DB_CONFIG['password'],
+        charset=DB_CONFIG['charset'],
+        database=DB_CONFIG['database']
     )
 
 def save_charging_bill(bill: dict):
@@ -461,6 +468,387 @@ async def cancel_charging():
         return jsonify({
             "status": False,
             "msg": str(e),
+            "data": None
+        })
+
+@blueprint.route('/bills', methods=['GET'])
+async def get_charging_bills():
+    """获取充电详单列表"""
+    username = request.args.get('username')  # 可选参数，按用户名筛选
+    
+    conn = None
+    cursor = None
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()  # 使用普通游标
+        
+        if username:
+            # 按用户名筛选
+            sql = """
+                SELECT * FROM charging_bills 
+                WHERE username = %s
+                ORDER BY create_time DESC
+            """
+            cursor.execute(sql, (username,))
+        else:
+            # 获取所有详单
+            sql = """
+                SELECT * FROM charging_bills 
+                ORDER BY create_time DESC
+            """
+            cursor.execute(sql)
+            
+        columns = [col[0] for col in cursor.description]
+        bills = []
+        
+        for row in cursor.fetchall():
+            bill = {}
+            for i, value in enumerate(row):
+                # 处理Decimal类型
+                if isinstance(value, Decimal):
+                    bill[columns[i]] = float(value)
+                else:
+                    bill[columns[i]] = value
+            bills.append(bill)
+        
+        return jsonify({
+            "status": True,
+            "msg": "获取充电详单成功",
+            "data": bills
+        })
+        
+    except Exception as e:
+        print("Error getting charging bills:", str(e))
+        return jsonify({
+            "status": False,
+            "msg": f"获取充电详单失败: {str(e)}",
+            "data": None
+        })
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+# 管理员API接口
+@blueprint.route('/admin/pile/toggle', methods=['POST'])
+async def toggle_charging_pile():
+    """启动/关闭充电桩"""
+    data = request.get_json()
+    pile_id = data.get('pile_id')
+    action = data.get('action')  # 'start' 或 'stop'
+    
+    try:
+        if pile_id not in charging_piles:
+            return jsonify({
+                "status": False,
+                "msg": "充电桩不存在",
+                "data": None
+            })
+            
+        pile = charging_piles[pile_id]
+        
+        if action == 'start':
+            # 启动充电桩
+            if pile.status == ChargingStatus.OFFLINE:
+                pile.status = ChargingStatus.IDLE
+                return jsonify({
+                    "status": True,
+                    "msg": f"充电桩{pile_id}已启动",
+                    "data": pile.get_status()
+                })
+            else:
+                return jsonify({
+                    "status": False,
+                    "msg": f"充电桩{pile_id}已处于启动状态",
+                    "data": pile.get_status()
+                })
+        elif action == 'stop':
+            # 关闭充电桩
+            if pile.status != ChargingStatus.OFFLINE:
+                # 如果有车辆正在充电，先断开连接并生成详单
+                if pile.status == ChargingStatus.CHARGING and pile.connected_vehicle:
+                    result = pile.disconnect_vehicle()
+                    # 检查结果是否包含错误信息
+                    if isinstance(result, dict) and 'error' in result:
+                        return jsonify({
+                            "status": False,
+                            "msg": result['error'],
+                            "data": None
+                        })
+                    # 保存充电详单
+                    if isinstance(result, dict) and 'bill' in result:
+                        save_charging_bill(result['bill'])
+                
+                pile.status = ChargingStatus.OFFLINE
+                return jsonify({
+                    "status": True,
+                    "msg": f"充电桩{pile_id}已关闭",
+                    "data": pile.get_status()
+                })
+            else:
+                return jsonify({
+                    "status": False,
+                    "msg": f"充电桩{pile_id}已处于关闭状态",
+                    "data": pile.get_status()
+                })
+        else:
+            return jsonify({
+                "status": False,
+                "msg": "无效的操作，必须是'start'或'stop'",
+                "data": None
+            })
+            
+    except Exception as e:
+        print("Error toggling charging pile:", str(e))
+        return jsonify({
+            "status": False,
+            "msg": str(e),
+            "data": None
+        })
+
+@blueprint.route('/admin/pile/status', methods=['GET'])
+async def get_admin_pile_status():
+    """获取所有充电桩详细状态（管理员视图）"""
+    try:
+        status = {}
+        for pile_id, pile in charging_piles.items():
+            # 获取基本状态
+            pile_status = pile.get_status()
+            
+            # 添加管理员需要的详细信息
+            pile_status.update({
+                'charging_count': pile.charging_count,
+                'total_charging_duration': round(pile.total_charging_duration / 60, 2),  # 转换为小时
+                'total_energy_delivered': round(pile.total_energy_delivered, 2),
+                'total_earnings': round(pile.total_earnings, 2),
+                'is_working': pile.status != ChargingStatus.OFFLINE and pile.status != ChargingStatus.FAULT
+            })
+            
+            status[pile_id] = pile_status
+            
+        return jsonify({
+            "status": True,
+            "msg": "获取充电桩状态成功",
+            "data": status
+        })
+    except Exception as e:
+        print("Error getting admin pile status:", str(e))
+        return jsonify({
+            "status": False,
+            "msg": "获取充电桩状态失败",
+            "data": None
+        })
+
+@blueprint.route('/admin/queue/waiting', methods=['GET'])
+async def get_waiting_vehicles():
+    """获取等候服务的车辆信息"""
+    try:
+        # 获取所有等候队列中的车辆
+        queue_status = waiting_queue.get_queue_status()
+        
+        # 处理等候车辆信息
+        waiting_vehicles = []
+        
+        # 处理快充队列
+        for vehicle in queue_status['fast_queue']:
+            # 计算排队时长（分钟）
+            queue_time = (time.time() - vehicle['join_time']) / 60
+            
+            waiting_vehicles.append({
+                'queue_number': vehicle['queue_number'],
+                'user_id': vehicle['vehicle_info']['username'],
+                'car_id': vehicle['vehicle_info']['car_id'],
+                'charge_mode': '快充',
+                'battery_capacity': 0,  # 需要从数据库获取
+                'charging_amount': vehicle['vehicle_info']['charging_amount'],
+                'queue_time': round(queue_time, 2)  # 排队时长（分钟）
+            })
+            
+        # 处理慢充队列
+        for vehicle in queue_status['slow_queue']:
+            # 计算排队时长（分钟）
+            queue_time = (time.time() - vehicle['join_time']) / 60
+            
+            waiting_vehicles.append({
+                'queue_number': vehicle['queue_number'],
+                'user_id': vehicle['vehicle_info']['username'],
+                'car_id': vehicle['vehicle_info']['car_id'],
+                'charge_mode': '慢充',
+                'battery_capacity': 0,  # 需要从数据库获取
+                'charging_amount': vehicle['vehicle_info']['charging_amount'],
+                'queue_time': round(queue_time, 2)  # 排队时长（分钟）
+            })
+            
+        # 获取车辆电池容量信息
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        for vehicle in waiting_vehicles:
+            try:
+                sql = """
+                    SELECT battery_capacity FROM cars 
+                    WHERE id = %s
+                """
+                cursor.execute(sql, (vehicle['car_id'],))
+                result = cursor.fetchone()
+                if result:
+                    vehicle['battery_capacity'] = float(result[0])
+            except Exception as e:
+                print(f"Error getting battery capacity for car {vehicle['car_id']}: {str(e)}")
+                
+        cursor.close()
+        conn.close()
+            
+        return jsonify({
+            "status": True,
+            "msg": "获取等候车辆信息成功",
+            "data": waiting_vehicles
+        })
+    except Exception as e:
+        print("Error getting waiting vehicles:", str(e))
+        return jsonify({
+            "status": False,
+            "msg": str(e),
+            "data": None
+        })
+
+@blueprint.route('/admin/reports', methods=['GET'])
+async def get_charging_reports():
+    """获取充电报表数据"""
+    report_type = request.args.get('type', 'day')  # 报表类型：day, week, month
+    start_date = request.args.get('start_date')  # 开始日期
+    
+    conn = None
+    cursor = None
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 根据报表类型构建SQL查询
+        if report_type == 'day':
+            # 按日统计
+            date_format = "%Y-%m-%d"
+        elif report_type == 'week':
+            # 按周统计
+            date_format = "%Y-%u"  # 年-周数
+        elif report_type == 'month':
+            # 按月统计
+            date_format = "%Y-%m"
+        else:
+            return jsonify({
+                "status": False,
+                "msg": "无效的报表类型，必须是'day'、'week'或'month'",
+                "data": None
+            })
+            
+        # 构建SQL查询 - 使用子查询避免GROUP BY问题
+        sql = """
+            SELECT 
+                time_period,
+                pile_id,
+                COUNT(*) as charging_count,
+                SUM(charging_duration) as total_duration,
+                SUM(charging_amount) as total_amount,
+                SUM(charging_cost) as total_charging_cost,
+                SUM(service_cost) as total_service_cost,
+                SUM(total_cost) as total_cost
+            FROM (
+                SELECT 
+                    DATE_FORMAT(start_time, %s) as time_period,
+                    pile_id,
+                    charging_duration,
+                    charging_amount,
+                    charging_cost,
+                    service_cost,
+                    total_cost
+                FROM charging_bills
+        """
+        
+        params = [date_format]
+        
+        # 添加日期筛选条件
+        if start_date:
+            sql += " WHERE start_time >= %s"
+            params.append(start_date)
+            
+        sql += """
+            ) AS temp
+            GROUP BY time_period, pile_id
+            ORDER BY time_period DESC, pile_id
+        """
+        
+        cursor.execute(sql, params)
+        columns = [col[0] for col in cursor.description]
+        reports = []
+        
+        for row in cursor.fetchall():
+            report = {}
+            for i, value in enumerate(row):
+                # 处理Decimal类型
+                if isinstance(value, Decimal):
+                    report[columns[i]] = float(value)
+                else:
+                    report[columns[i]] = value
+            reports.append(report)
+            
+        return jsonify({
+            "status": True,
+            "msg": "获取充电报表成功",
+            "data": reports
+        })
+        
+    except Exception as e:
+        print("Error getting charging reports:", str(e))
+        return jsonify({
+            "status": False,
+            "msg": f"获取充电报表失败: {str(e)}",
+            "data": None
+        })
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+
+@blueprint.route('/admin/pile/fault', methods=['POST'])
+async def set_pile_fault():
+    """设置充电桩故障"""
+    data = request.get_json()
+    pile_id = data.get('pile_id')
+    schedule_strategy = data.get('schedule_strategy', 'priority')  # 'priority' 或 'time_order'
+    
+    try:
+        # 使用调度器处理充电桩故障
+        result = scheduler.handle_pile_fault(pile_id, schedule_strategy)
+        return jsonify(result)
+        
+    except Exception as e:
+        print("Error setting pile fault:", str(e))
+        return jsonify({
+            "status": False,
+            "msg": f"设置充电桩故障失败: {str(e)}",
+            "data": None
+        })
+
+@blueprint.route('/admin/pile/repair', methods=['POST'])
+async def repair_pile():
+    """修复充电桩故障"""
+    data = request.get_json()
+    pile_id = data.get('pile_id')
+    
+    try:
+        # 使用调度器处理充电桩修复
+        result = scheduler.handle_pile_repair(pile_id)
+        return jsonify(result)
+        
+    except Exception as e:
+        print("Error repairing pile:", str(e))
+        return jsonify({
+            "status": False,
+            "msg": f"修复充电桩故障失败: {str(e)}",
             "data": None
         })
 

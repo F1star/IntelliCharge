@@ -50,6 +50,10 @@ class ChargingPile:
         self.charge_queue = deque(maxlen=2)
         self.charging_bills = []  # 存储充电详单
         self.current_charging_amount = 0.0  # 当前充电量
+        
+        # 管理员统计信息
+        self.charging_count = 0  # 充电次数
+        self.total_charging_duration = 0.0  # 总充电时长（分钟）
 
         self.rate_periods = [
             # 谷时(0.4元/度): 23:00~次日7:00
@@ -145,6 +149,10 @@ class ChargingPile:
         # 更新统计数据
         self.total_energy_delivered += energy_consumed
         self.total_earnings += cost
+        
+        # 更新管理员统计信息
+        self.charging_count += 1
+        self.total_charging_duration += charging_duration
         
         # 生成充电详单
         bill = create_charging_bill(
@@ -286,20 +294,75 @@ class ChargingPile:
         
         return total_energy, total_cost
     
-    def set_fault(self):
-        """设置充电桩为故障状态"""
-        if self.status == ChargingStatus.CHARGING:
-            self.disconnect_vehicle()
-        self.status = ChargingStatus.FAULT
-        return f"充电桩[{self.pile_id}]已设置为故障状态"
-    
-    def repair(self):
-        """修复充电桩"""
+    def set_fault(self) -> Dict:
+        """设置充电桩为故障状态，并处理正在充电的车辆"""
+        # 如果充电桩已经是故障或离线状态，不做处理
         if self.status == ChargingStatus.FAULT:
-            self.status = ChargingStatus.IDLE
-            return f"充电桩[{self.pile_id}]已修复"
-        return f"操作失败: 充电桩[{self.pile_id}]当前不在故障状态"
-    
+            return {
+                "status": False,
+                "msg": f"充电桩{self.pile_id}已处于故障状态",
+                "data": None
+            }
+            
+        if self.status == ChargingStatus.OFFLINE:
+            return {
+                "status": False,
+                "msg": f"充电桩{self.pile_id}处于离线状态，无法设置故障",
+                "data": None
+            }
+            
+        # 保存原始状态
+        original_status = self.status
+        
+        # 设置为故障状态
+        self.status = ChargingStatus.FAULT
+        
+        # 如果有车辆正在充电，生成充电详单并断开连接
+        bill_data = None
+        if original_status == ChargingStatus.CHARGING and self.connected_vehicle:
+            result = self.disconnect_vehicle()
+            if isinstance(result, dict) and 'bill' in result:
+                bill_data = result['bill']
+                
+        # 获取当前队列中的车辆
+        queue_vehicles = list(self.charge_queue)
+                
+        return {
+            "status": True,
+            "msg": f"充电桩{self.pile_id}已设置为故障状态",
+            "original_status": original_status.value,
+            "queue": queue_vehicles,
+            "bill": bill_data
+        }
+        
+    def repair(self) -> Dict:
+        """修复充电桩故障"""
+        # 如果充电桩不是故障状态，不做处理
+        if self.status != ChargingStatus.FAULT:
+            return {
+                "status": False,
+                "msg": f"充电桩{self.pile_id}不处于故障状态，当前状态为{self.status.value}",
+                "data": None
+            }
+            
+        # 设置为空闲状态
+        self.status = ChargingStatus.IDLE
+        
+        return {
+            "status": True,
+            "msg": f"充电桩{self.pile_id}已修复",
+            "data": {
+                "pile_id": self.pile_id,
+                "status": self.status.value
+            }
+        }
+        
+    def remove_all_vehicles(self) -> List[Dict]:
+        """移除所有排队车辆（用于故障调度）"""
+        vehicles = list(self.charge_queue)
+        self.charge_queue.clear()
+        return vehicles
+
     def get_status(self) -> Dict[str, Any]:
         """获取当前状态信息"""
         return {
@@ -387,7 +450,7 @@ class ChargingPile:
             
         # 计算当前已充电量
         current_time = time.time()
-        elapsed_time = (current_time - self.start_time) / 3600.0  # 转换为小时
+        elapsed_time = (current_time - float(self.start_time)) / 3600.0  # 转换为小时
         self.current_charging_amount = self.power * elapsed_time
         
         # 检查是否达到请求充电量
@@ -443,21 +506,14 @@ class ChargingPile:
         }
 
     def get_current_charging_amount(self) -> float:
-        """
-        安全地获取当前充电量
-        :return: 当前充电量（度）
-        """
-        if self.status != ChargingStatus.CHARGING or self.start_time is None:
+        """获取当前已充电量"""
+        if self.status != ChargingStatus.CHARGING or not self.connected_vehicle or self.start_time is None:
             return 0.0
-        
-        try:
-            current_time = time.time()
-            start_time = float(self.start_time)  # 确保是float类型
-            elapsed_time = (current_time - start_time) / 3600.0  # 转换为小时
-            return self.power * elapsed_time
-        except Exception as e:
-            print(f"计算充电量出错: {str(e)}")
-            return 0.0
+            
+        # 计算当前已充电量
+        current_time = time.time()
+        elapsed_time = (current_time - float(self.start_time)) / 3600.0  # 转换为小时
+        return self.power * elapsed_time
 
 if __name__ == "__main__":
     # 创建充电桩实例（7.5kW功率）

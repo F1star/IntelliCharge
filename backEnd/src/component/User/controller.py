@@ -3,8 +3,26 @@ from flask import Blueprint, request, jsonify
 import pymysql
 from ...dataStructure.User import *
 from flask_cors import CORS
+import sys
+import os
+
+# 添加项目根目录到系统路径
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
+from config.db_config import DB_CONFIG
 
 blueprint = Blueprint('user', __name__)
+
+# 获取数据库连接的函数
+def get_db_connection():
+    """获取数据库连接"""
+    return pymysql.connect(
+        host=DB_CONFIG['host'],
+        port=DB_CONFIG['port'],
+        user=DB_CONFIG['user'],
+        password=DB_CONFIG['password'],
+        charset=DB_CONFIG['charset'],
+        database=DB_CONFIG['database']
+    )
 
 @blueprint.route('/', methods=['POST', 'GET'])
 async def index():
@@ -16,7 +34,7 @@ async def login():
     user = User.from_json(request.get_json())
     print("user", user)
 
-    conn = pymysql.connect(host='127.0.0.1', port=3306, user='root', password='root', charset='utf8', database='pile')
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
@@ -61,7 +79,7 @@ async def register():
     user = User.from_json(request.get_json())
     print("user", user)
 
-    conn = pymysql.connect(host='127.0.0.1', port=3306, user='root', password='root', charset='utf8', database='pile')
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
@@ -118,7 +136,7 @@ async def change_password():
             "role": "user"
         }))
 
-    conn = pymysql.connect(host='127.0.0.1', port=3306, user='root', password='root', charset='utf8', database='pile')
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
@@ -173,7 +191,7 @@ async def get_user_cars():
             "role": "user"
         }))
 
-    conn = pymysql.connect(host='127.0.0.1', port=3306, user='root', password='root', charset='utf8', database='pile')
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
@@ -249,7 +267,7 @@ async def add_car():
             "role": "user"
         }))
 
-    conn = pymysql.connect(host='127.0.0.1', port=3306, user='root', password='root', charset='utf8', database='pile')
+    conn = get_db_connection()
     cursor = conn.cursor()
 
     try:

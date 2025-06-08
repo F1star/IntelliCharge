@@ -11,6 +11,14 @@
           <team-outlined />
           <span>个人</span>
         </a-menu-item>
+        <a-menu-item key="3" @click="goToBills">
+          <file-outlined />
+          <span>充电详单</span>
+        </a-menu-item>
+        <a-menu-item v-if="isAdmin" key="4" @click="goToAdmin">
+          <dashboard-outlined />
+          <span>管理员控制台</span>
+        </a-menu-item>
       </a-menu>
     </a-layout-sider>
     <a-layout :style="{ marginLeft: '200px' }">
@@ -29,13 +37,21 @@
 
 <script setup>
 import { onMounted, ref, computed, h } from 'vue';
+import { useRouter } from 'vue-router';
+import { mainStore } from '../store';
 
-import { TranslationOutlined, MessageOutlined, PictureOutlined, TeamOutlined, FileOutlined, AudioOutlined, SaveOutlined } from '@ant-design/icons-vue';
+import { TranslationOutlined, MessageOutlined, PictureOutlined, TeamOutlined, FileOutlined, AudioOutlined, SaveOutlined, DashboardOutlined } from '@ant-design/icons-vue';
 import { createFromIconfontCN } from '@ant-design/icons-vue';
 import { message, TypographyText } from 'ant-design-vue';
 
 import PersonalSidebar from '../components/PersonalSidebar.vue';
 import HomeSidebar from '../components/HomeSidebar.vue';
+
+const router = useRouter();
+const userStore = mainStore();
+
+// 判断是否为管理员
+const isAdmin = computed(() => userStore.role === 'admin');
 
 // 使用阿里图标库的 URL 创建自定义图标组件
 const IconFont = createFromIconfontCN({
@@ -58,13 +74,24 @@ const editorStyle = computed(() => {
   };
 });
 
+const selectedKeys = ref(['1']);
 const activeSidebar = ref('');
 const isModalVisiblePersonal = ref(false);
 const showHomeSidebar = () => {
   activeSidebar.value = 'home';
+  selectedKeys.value = ['1'];
 };
 const showPersonalSidebar = () => {
   activeSidebar.value = 'personal';
+  selectedKeys.value = ['2'];
+};
+
+const goToBills = () => {
+  router.push({ name: 'bills' });
+};
+
+const goToAdmin = () => {
+  router.push({ name: 'admin' });
 };
 
 </script>

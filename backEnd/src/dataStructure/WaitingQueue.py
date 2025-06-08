@@ -267,35 +267,305 @@ class Queue:
         
     def change_charge_mode(self, queue_number: str, new_mode: str) -> Optional[Dict[str, Any]]:
         """
-        修改充电模式
-        :param queue_number: 队列号
+        修改充电模式（快充/慢充）
+        :param queue_number: 排队号码
         :param new_mode: 新的充电模式 ('F': 快充, 'T': 慢充)
-        :return: 修改后的车辆信息，如果未找到则返回None
+        :return: 更新后的车辆信息，如果未找到则返回None
         """
         # 检查新模式是否有效
         if new_mode not in ['F', 'T']:
-            raise ValueError("无效的充电模式，必须是'F'(快充)或'T'(慢充)")
+            return None
             
-        # 如果当前队列号与新模式相同，无需修改
-        if (queue_number.startswith('F') and new_mode == 'F') or (queue_number.startswith('T') and new_mode == 'T'):
-            return self.find_vehicle_by_queue_number(queue_number)
-            
-        # 找到并移除车辆
-        vehicle = self.remove_vehicle(queue_number)
+        # 查找车辆
+        vehicle = self.find_vehicle_by_queue_number(queue_number)
         if not vehicle:
             return None
             
-        # 生成新的队列号并添加到对应队列末尾
-        if new_mode == 'F':
-            new_queue_number = f"F{self.fast_counter}"
-            self.fast_counter += 1
-            vehicle['queue_number'] = new_queue_number
-            self.fast_queue.append(vehicle)
-        else:  # new_mode == 'T'
-            new_queue_number = f"T{self.slow_counter}"
-            self.slow_counter += 1
-            vehicle['queue_number'] = new_queue_number
-            self.slow_queue.append(vehicle)
+        # 从原队列中移除
+        if queue_number.startswith('F'):
+            self.fast_queue.remove(vehicle)
+        else:
+            self.slow_queue.remove(vehicle)
             
-        return vehicle
+        # 生成新的排队号码
+        if new_mode == 'F':
+            new_queue_number = f"F{self.fast_counter:03d}"
+            self.fast_counter += 1
+            self.fast_queue.append({
+                'queue_number': new_queue_number,
+                'vehicle_info': vehicle['vehicle_info'],
+                'join_time': vehicle['join_time']
+            })
+        else:
+            new_queue_number = f"T{self.slow_counter:03d}"
+            self.slow_counter += 1
+            self.slow_queue.append({
+                'queue_number': new_queue_number,
+                'vehicle_info': vehicle['vehicle_info'],
+                'join_time': vehicle['join_time']
+            })
+            
+        # 返回更新后的车辆信息
+        return self.find_vehicle_by_queue_number(new_queue_number)
+        
+    def handle_fault_priority_scheduling(self, fault_pile_id: str, fault_queue: List[Dict]) -> Dict:
+        """
+        处理充电桩故障的优先级调度
+        优先级调度：暂停等候区叫号服务，当其它同类型充电桩队列有空位时，优先为故障充电桩等候队列提供调度
+        :param fault_pile_id: 故障充电桩ID
+        :param fault_queue: 故障充电桩的等候队列
+        :return: 调度结果
+        """
+        if not fault_queue:
+            return {
+                "status": True,
+                "msg": "故障充电桩队列为空，无需调度",
+                "data": {
+                    "fault_pile_id": fault_pile_id,
+                    "rescheduled_vehicles": []
+                }
+            }
+            
+        # 获取故障充电桩信息
+        fault_pile = self.charging_piles.get(fault_pile_id)
+        if not fault_pile:
+            return {
+                "status": False,
+                "msg": f"未找到充电桩{fault_pile_id}的信息",
+                "data": None
+            }
+            
+        # 获取同类型的其他充电桩
+        same_type_piles = [
+            pile for pile_id, pile in self.charging_piles.items()
+            if pile_id != fault_pile_id and 
+               pile['charging_category'] == fault_pile['charging_category'] and
+               pile['status'] != 'FAULT' and pile['status'] != '故障' and
+               pile['status'] != 'OFFLINE' and pile['status'] != '离线'
+        ]
+        
+        if not same_type_piles:
+            return {
+                "status": False,
+                "msg": f"没有可用的同类型充电桩进行调度",
+                "data": {
+                    "fault_pile_id": fault_pile_id,
+                    "fault_queue": fault_queue
+                }
+            }
+            
+        # 记录调度结果
+        rescheduled_vehicles = []
+        
+        # 为故障队列中的每个车辆寻找可用的充电桩
+        for vehicle in fault_queue:
+            # 寻找队列最短的充电桩
+            target_pile = min(same_type_piles, key=lambda p: len(p.get('queue_vehicles', [])))
+            
+            # 如果找到了可用的充电桩，将车辆添加到该充电桩的队列中
+            if target_pile and len(target_pile.get('queue_vehicles', [])) < target_pile.get('queue_maxlen', 2):
+                # 记录调度结果
+                rescheduled_vehicles.append({
+                    "vehicle": vehicle,
+                    "target_pile": target_pile['pile_id']
+                })
+                
+                # 将车辆添加到目标充电桩的队列中
+                if 'queue_vehicles' not in target_pile:
+                    target_pile['queue_vehicles'] = []
+                target_pile['queue_vehicles'].append(vehicle)
+                
+        return {
+            "status": True,
+            "msg": f"已完成{len(rescheduled_vehicles)}辆车的优先级调度",
+            "data": {
+                "fault_pile_id": fault_pile_id,
+                "rescheduled_vehicles": rescheduled_vehicles
+            }
+        }
+        
+    def handle_fault_time_order_scheduling(self, fault_pile_id: str, fault_queue: List[Dict]) -> Dict:
+        """
+        处理充电桩故障的时间顺序调度
+        时间顺序调度：将其它同类型充电桩中尚未充电的车辆与故障队列中车辆合为一组，按照排队号码先后顺序重新调度
+        :param fault_pile_id: 故障充电桩ID
+        :param fault_queue: 故障充电桩的等候队列
+        :return: 调度结果
+        """
+        if not fault_queue:
+            return {
+                "status": True,
+                "msg": "故障充电桩队列为空，无需调度",
+                "data": {
+                    "fault_pile_id": fault_pile_id,
+                    "rescheduled_vehicles": []
+                }
+            }
+            
+        # 获取故障充电桩信息
+        fault_pile = self.charging_piles.get(fault_pile_id)
+        if not fault_pile:
+            return {
+                "status": False,
+                "msg": f"未找到充电桩{fault_pile_id}的信息",
+                "data": None
+            }
+            
+        # 获取同类型的其他充电桩
+        same_type_piles = [
+            pile for pile_id, pile in self.charging_piles.items()
+            if pile_id != fault_pile_id and 
+               pile['charging_category'] == fault_pile['charging_category'] and
+               pile['status'] != 'FAULT' and pile['status'] != '故障' and
+               pile['status'] != 'OFFLINE' and pile['status'] != '离线'
+        ]
+        
+        if not same_type_piles:
+            return {
+                "status": False,
+                "msg": f"没有可用的同类型充电桩进行调度",
+                "data": {
+                    "fault_pile_id": fault_pile_id,
+                    "fault_queue": fault_queue
+                }
+            }
+            
+        # 收集所有同类型充电桩中尚未充电的车辆
+        all_waiting_vehicles = []
+        
+        # 添加故障队列中的车辆
+        all_waiting_vehicles.extend(fault_queue)
+        
+        # 添加其他同类型充电桩中尚未充电的车辆
+        for pile in same_type_piles:
+            queue_vehicles = pile.get('queue_vehicles', [])
+            if isinstance(queue_vehicles, list):
+                # 过滤掉正在充电的车辆
+                waiting_vehicles = [v for v in queue_vehicles if pile.get('connected_vehicle') is None or v['car_id'] != pile.get('connected_vehicle', {}).get('car_id')]
+                all_waiting_vehicles.extend(waiting_vehicles)
+                
+        # 按照排队号码排序（假设排队号码格式为"X123"，其中X是类型，123是序号）
+        all_waiting_vehicles.sort(key=lambda v: int(v.get('queue_number', '0')[1:]) if v.get('queue_number', '0')[1:].isdigit() else 0)
+        
+        # 清空所有同类型充电桩的队列
+        for pile in same_type_piles:
+            pile['queue_vehicles'] = []
+            
+        # 重新分配车辆到充电桩
+        rescheduled_vehicles = []
+        for vehicle in all_waiting_vehicles:
+            # 寻找队列最短的充电桩
+            target_pile = min(same_type_piles, key=lambda p: len(p.get('queue_vehicles', [])))
+            
+            if target_pile:
+                # 记录调度结果
+                rescheduled_vehicles.append({
+                    "vehicle": vehicle,
+                    "target_pile": target_pile['pile_id']
+                })
+                
+                # 将车辆添加到目标充电桩的队列中
+                if 'queue_vehicles' not in target_pile:
+                    target_pile['queue_vehicles'] = []
+                target_pile['queue_vehicles'].append(vehicle)
+                
+        return {
+            "status": True,
+            "msg": f"已完成{len(rescheduled_vehicles)}辆车的时间顺序调度",
+            "data": {
+                "fault_pile_id": fault_pile_id,
+                "rescheduled_vehicles": rescheduled_vehicles
+            }
+        }
+        
+    def handle_pile_recovery(self, recovered_pile_id: str) -> Dict:
+        """
+        处理充电桩故障恢复的调度
+        当充电桩故障恢复，若其它同类型充电桩中尚有车辆排队，则将其它同类型充电桩中尚未充电的车辆合为一组，按照排队号码先后顺序重新调度
+        :param recovered_pile_id: 恢复的充电桩ID
+        :return: 调度结果
+        """
+        # 获取恢复的充电桩信息
+        recovered_pile = self.charging_piles.get(recovered_pile_id)
+        if not recovered_pile:
+            return {
+                "status": False,
+                "msg": f"未找到充电桩{recovered_pile_id}的信息",
+                "data": None
+            }
+            
+        # 获取同类型的其他充电桩
+        same_type_piles = [
+            pile for pile_id, pile in self.charging_piles.items()
+            if pile_id != recovered_pile_id and 
+               pile['charging_category'] == recovered_pile['charging_category'] and
+               pile['status'] != 'FAULT' and pile['status'] != '故障' and
+               pile['status'] != 'OFFLINE' and pile['status'] != '离线'
+        ]
+        
+        # 检查其他同类型充电桩是否有车辆排队
+        has_waiting_vehicles = False
+        for pile in same_type_piles:
+            queue_vehicles = pile.get('queue_vehicles', [])
+            if isinstance(queue_vehicles, list) and queue_vehicles:
+                has_waiting_vehicles = True
+                break
+                
+        if not has_waiting_vehicles:
+            return {
+                "status": True,
+                "msg": "其他同类型充电桩没有排队车辆，无需重新调度",
+                "data": {
+                    "recovered_pile_id": recovered_pile_id,
+                    "rescheduled_vehicles": []
+                }
+            }
+            
+        # 收集所有同类型充电桩中尚未充电的车辆
+        all_waiting_vehicles = []
+        
+        # 添加其他同类型充电桩中尚未充电的车辆
+        for pile in same_type_piles:
+            queue_vehicles = pile.get('queue_vehicles', [])
+            if isinstance(queue_vehicles, list):
+                # 过滤掉正在充电的车辆
+                waiting_vehicles = [v for v in queue_vehicles if pile.get('connected_vehicle') is None or v['car_id'] != pile.get('connected_vehicle', {}).get('car_id')]
+                all_waiting_vehicles.extend(waiting_vehicles)
+                
+        # 添加恢复的充电桩到可用充电桩列表
+        same_type_piles.append(recovered_pile)
+        
+        # 按照排队号码排序
+        all_waiting_vehicles.sort(key=lambda v: int(v.get('queue_number', '0')[1:]) if v.get('queue_number', '0')[1:].isdigit() else 0)
+        
+        # 清空所有同类型充电桩的队列
+        for pile in same_type_piles:
+            pile['queue_vehicles'] = []
+            
+        # 重新分配车辆到充电桩
+        rescheduled_vehicles = []
+        for vehicle in all_waiting_vehicles:
+            # 寻找队列最短的充电桩
+            target_pile = min(same_type_piles, key=lambda p: len(p.get('queue_vehicles', [])))
+            
+            if target_pile:
+                # 记录调度结果
+                rescheduled_vehicles.append({
+                    "vehicle": vehicle,
+                    "target_pile": target_pile['pile_id']
+                })
+                
+                # 将车辆添加到目标充电桩的队列中
+                if 'queue_vehicles' not in target_pile:
+                    target_pile['queue_vehicles'] = []
+                target_pile['queue_vehicles'].append(vehicle)
+                
+        return {
+            "status": True,
+            "msg": f"充电桩{recovered_pile_id}恢复后，已完成{len(rescheduled_vehicles)}辆车的重新调度",
+            "data": {
+                "recovered_pile_id": recovered_pile_id,
+                "rescheduled_vehicles": rescheduled_vehicles
+            }
+        }
         

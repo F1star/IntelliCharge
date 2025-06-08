@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import HomeView from '../views/HomeView.vue'
 import { mainStore } from '../store';
+import { message } from 'ant-design-vue';
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -24,6 +25,17 @@ const router = createRouter({
       path: '/edit',
       name: 'edit',
       component: () => import('../views/Edit.vue')
+    },
+    {
+      path: '/bills',
+      name: 'bills',
+      component: () => import('../views/BillView.vue')
+    },
+    {
+      path: '/admin',
+      name: 'admin',
+      component: () => import('../views/AdminView.vue'),
+      meta: { requiresAdmin: true }
     }
   ]
 })
@@ -34,7 +46,13 @@ router.beforeEach((to, from, next) => {
   if (!store.isLogin() && to.path != '/login' && to.path != '/register' && to.path != '/') {
     // 重定向到登录页面
     next('/login');
-  } else {
+  } 
+  // 检查是否需要管理员权限
+  else if (to.meta.requiresAdmin && store.role !== 'admin') {
+    message.error('您没有访问此页面的权限');
+    next('/edit');
+  }
+  else {
     // 继续路由导航
     next();
   }

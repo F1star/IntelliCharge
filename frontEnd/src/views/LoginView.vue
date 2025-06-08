@@ -23,14 +23,20 @@ export default {
         });
         console.log("login res", res);
         if (res.status === true) {
-          message.success('Login successful!');
+          message.success('登录成功！');
           userStore.setUser(username.value, res.role);
-          router.push({ name: 'edit' });
+          
+          // 根据角色重定向到不同页面
+          if (res.role === 'admin') {
+            router.push({ name: 'admin' });
+          } else {
+            router.push({ name: 'edit' });
+          }
         } else {
-          message.error('Login failed. Please check your username and password.');
+          message.error('登录失败，请检查用户名和密码。');
         }
       } catch (error) {
-        message.error('Login failed. Please check your username and password.');
+        message.error('登录失败，请检查用户名和密码。');
       }
     };
 

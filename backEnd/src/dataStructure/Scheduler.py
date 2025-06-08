@@ -83,3 +83,386 @@ class Scheduler:
                         print(f"充电桩[{pile_id}]自动断开失败: {result.get('error', '未知错误')}")
         except Exception as e:
             print(f"检查充电状态时发生错误: {str(e)}")
+            
+    def handle_pile_fault(self, pile_id: str, schedule_strategy: str = 'priority') -> Dict:
+        """
+        处理充电桩故障
+        :param pile_id: 故障充电桩ID
+        :param schedule_strategy: 调度策略 ('priority'或'time_order')
+        :return: 处理结果
+        """
+        try:
+            if pile_id not in self.charging_piles:
+                return {
+                    "status": False,
+                    "msg": f"充电桩{pile_id}不存在",
+                    "data": None
+                }
+                
+            pile = self.charging_piles[pile_id]
+            
+            # 设置充电桩为故障状态
+            fault_result = pile.set_fault()
+            
+            if not fault_result.get('status', False):
+                return fault_result
+                
+            # 获取故障充电桩的等候队列
+            fault_queue = fault_result.get('queue', [])
+            
+            # 处理故障调度
+            schedule_result = {}
+            if schedule_strategy == 'priority':
+                # 优先级调度
+                schedule_result = self._handle_fault_priority_scheduling(pile_id, fault_queue)
+            else:
+                # 时间顺序调度
+                schedule_result = self._handle_fault_time_order_scheduling(pile_id, fault_queue)
+                
+            # 保存充电详单（如果有）
+            if fault_result.get('bill') and self.save_bill_func:
+                self.save_bill_func(fault_result['bill'])
+                
+            # 清空故障充电桩的队列
+            pile.remove_all_vehicles()
+                
+            return {
+                "status": True,
+                "msg": f"充电桩{pile_id}已设置为故障状态，并完成故障调度",
+                "data": {
+                    "fault_result": fault_result,
+                    "schedule_result": schedule_result
+                }
+            }
+            
+        except Exception as e:
+            print(f"处理充电桩故障时发生错误: {str(e)}")
+            return {
+                "status": False,
+                "msg": f"处理充电桩故障失败: {str(e)}",
+                "data": None
+            }
+            
+    def handle_pile_repair(self, pile_id: str) -> Dict:
+        """
+        处理充电桩故障修复
+        :param pile_id: 修复的充电桩ID
+        :return: 处理结果
+        """
+        try:
+            if pile_id not in self.charging_piles:
+                return {
+                    "status": False,
+                    "msg": f"充电桩{pile_id}不存在",
+                    "data": None
+                }
+                
+            pile = self.charging_piles[pile_id]
+            
+            # 修复充电桩
+            repair_result = pile.repair()
+            
+            if not repair_result.get('status', False):
+                return repair_result
+                
+            # 处理故障恢复调度
+            schedule_result = self._handle_pile_recovery(pile_id)
+                
+            return {
+                "status": True,
+                "msg": f"充电桩{pile_id}已修复，并完成调度",
+                "data": {
+                    "repair_result": repair_result,
+                    "schedule_result": schedule_result
+                }
+            }
+            
+        except Exception as e:
+            print(f"处理充电桩修复时发生错误: {str(e)}")
+            return {
+                "status": False,
+                "msg": f"处理充电桩修复失败: {str(e)}",
+                "data": None
+            }
+            
+    def _handle_fault_priority_scheduling(self, fault_pile_id: str, fault_queue: List[Dict]) -> Dict:
+        """
+        实现优先级调度策略
+        :param fault_pile_id: 故障充电桩ID
+        :param fault_queue: 故障充电桩的等候队列
+        :return: 调度结果
+        """
+        if not fault_queue:
+            return {
+                "status": True,
+                "msg": "故障充电桩队列为空，无需调度",
+                "data": {
+                    "fault_pile_id": fault_pile_id,
+                    "rescheduled_vehicles": []
+                }
+            }
+            
+        # 获取故障充电桩信息
+        fault_pile = self.charging_piles.get(fault_pile_id)
+        if not fault_pile:
+            return {
+                "status": False,
+                "msg": f"未找到充电桩{fault_pile_id}的信息",
+                "data": None
+            }
+            
+        # 获取同类型的其他充电桩
+        same_type_piles = {
+            pile_id: pile for pile_id, pile in self.charging_piles.items()
+            if pile_id != fault_pile_id and 
+               pile.charging_category == fault_pile.charging_category and
+               pile.status.value != '故障' and pile.status.value != '离线'
+        }
+        
+        if not same_type_piles:
+            return {
+                "status": False,
+                "msg": f"没有可用的同类型充电桩进行调度",
+                "data": {
+                    "fault_pile_id": fault_pile_id,
+                    "fault_queue": fault_queue
+                }
+            }
+            
+        # 记录调度结果
+        rescheduled_vehicles = []
+        
+        # 为故障队列中的每个车辆寻找可用的充电桩
+        for vehicle in fault_queue:
+            # 寻找队列最短的充电桩
+            target_pile_id = min(
+                same_type_piles.keys(), 
+                key=lambda pid: len(same_type_piles[pid].charge_queue)
+            )
+            target_pile = same_type_piles[target_pile_id]
+            
+            # 如果找到了可用的充电桩，将车辆添加到该充电桩的队列中
+            queue_maxlen = target_pile.charge_queue.maxlen or float('inf')
+            if len(target_pile.charge_queue) < queue_maxlen:
+                # 将车辆添加到目标充电桩的队列中
+                result = target_pile.join_queue(vehicle)
+                
+                # 记录调度结果
+                if not isinstance(result, dict) or 'error' not in result:
+                    rescheduled_vehicles.append({
+                        "vehicle": vehicle,
+                        "target_pile": target_pile_id
+                    })
+                else:
+                    print(f"调度车辆失败: {result.get('error', '未知错误')}")
+                
+        return {
+            "status": True,
+            "msg": f"已完成{len(rescheduled_vehicles)}辆车的优先级调度",
+            "data": {
+                "fault_pile_id": fault_pile_id,
+                "rescheduled_vehicles": rescheduled_vehicles
+            }
+        }
+        
+    def _handle_fault_time_order_scheduling(self, fault_pile_id: str, fault_queue: List[Dict]) -> Dict:
+        """
+        实现时间顺序调度策略
+        :param fault_pile_id: 故障充电桩ID
+        :param fault_queue: 故障充电桩的等候队列
+        :return: 调度结果
+        """
+        if not fault_queue:
+            return {
+                "status": True,
+                "msg": "故障充电桩队列为空，无需调度",
+                "data": {
+                    "fault_pile_id": fault_pile_id,
+                    "rescheduled_vehicles": []
+                }
+            }
+            
+        # 获取故障充电桩信息
+        fault_pile = self.charging_piles.get(fault_pile_id)
+        if not fault_pile:
+            return {
+                "status": False,
+                "msg": f"未找到充电桩{fault_pile_id}的信息",
+                "data": None
+            }
+            
+        # 获取同类型的其他充电桩
+        same_type_piles = {
+            pile_id: pile for pile_id, pile in self.charging_piles.items()
+            if pile_id != fault_pile_id and 
+               pile.charging_category == fault_pile.charging_category and
+               pile.status.value != '故障' and pile.status.value != '离线'
+        }
+        
+        if not same_type_piles:
+            return {
+                "status": False,
+                "msg": f"没有可用的同类型充电桩进行调度",
+                "data": {
+                    "fault_pile_id": fault_pile_id,
+                    "fault_queue": fault_queue
+                }
+            }
+            
+        # 收集所有同类型充电桩中尚未充电的车辆
+        all_waiting_vehicles = []
+        
+        # 添加故障队列中的车辆
+        all_waiting_vehicles.extend(fault_queue)
+        
+        # 添加其他同类型充电桩中尚未充电的车辆
+        for pile_id, pile in same_type_piles.items():
+            # 获取队列中的车辆（排除正在充电的车辆）
+            if pile.connected_vehicle:
+                waiting_vehicles = [v for v in pile.charge_queue if v != pile.connected_vehicle]
+            else:
+                waiting_vehicles = list(pile.charge_queue)
+                
+            # 清空队列，准备重新分配
+            pile.charge_queue.clear()
+            
+            # 添加到等待分配的车辆列表
+            all_waiting_vehicles.extend(waiting_vehicles)
+            
+        # 按照排队号码排序（如果有）
+        if all_waiting_vehicles and 'queue_number' in all_waiting_vehicles[0]:
+            all_waiting_vehicles.sort(
+                key=lambda v: int(v.get('queue_number', '0')[1:]) 
+                if v.get('queue_number', '0') and v.get('queue_number', '0')[1:].isdigit() 
+                else 0
+            )
+            
+        # 重新分配车辆到充电桩
+        rescheduled_vehicles = []
+        for vehicle in all_waiting_vehicles:
+            # 寻找队列最短的充电桩
+            target_pile_id = min(
+                same_type_piles.keys(), 
+                key=lambda pid: len(same_type_piles[pid].charge_queue)
+            )
+            target_pile = same_type_piles[target_pile_id]
+            
+            # 将车辆添加到目标充电桩的队列中
+            result = target_pile.join_queue(vehicle)
+            
+            # 记录调度结果
+            if not isinstance(result, dict) or 'error' not in result:
+                rescheduled_vehicles.append({
+                    "vehicle": vehicle,
+                    "target_pile": target_pile_id
+                })
+            else:
+                print(f"调度车辆失败: {result.get('error', '未知错误')}")
+                
+        return {
+            "status": True,
+            "msg": f"已完成{len(rescheduled_vehicles)}辆车的时间顺序调度",
+            "data": {
+                "fault_pile_id": fault_pile_id,
+                "rescheduled_vehicles": rescheduled_vehicles
+            }
+        }
+        
+    def _handle_pile_recovery(self, recovered_pile_id: str) -> Dict:
+        """
+        处理充电桩故障恢复的调度
+        :param recovered_pile_id: 恢复的充电桩ID
+        :return: 调度结果
+        """
+        # 获取恢复的充电桩信息
+        recovered_pile = self.charging_piles.get(recovered_pile_id)
+        if not recovered_pile:
+            return {
+                "status": False,
+                "msg": f"未找到充电桩{recovered_pile_id}的信息",
+                "data": None
+            }
+            
+        # 获取同类型的其他充电桩
+        same_type_piles = {
+            pile_id: pile for pile_id, pile in self.charging_piles.items()
+            if pile_id != recovered_pile_id and 
+               pile.charging_category == recovered_pile.charging_category and
+               pile.status.value != '故障' and pile.status.value != '离线'
+        }
+        
+        # 检查其他同类型充电桩是否有车辆排队
+        has_waiting_vehicles = False
+        for pile_id, pile in same_type_piles.items():
+            if pile.charge_queue:
+                has_waiting_vehicles = True
+                break
+                
+        if not has_waiting_vehicles:
+            return {
+                "status": True,
+                "msg": "其他同类型充电桩没有排队车辆，无需重新调度",
+                "data": {
+                    "recovered_pile_id": recovered_pile_id,
+                    "rescheduled_vehicles": []
+                }
+            }
+            
+        # 收集所有同类型充电桩中尚未充电的车辆
+        all_waiting_vehicles = []
+        
+        # 添加其他同类型充电桩中尚未充电的车辆
+        for pile_id, pile in same_type_piles.items():
+            # 获取队列中的车辆（排除正在充电的车辆）
+            if pile.connected_vehicle:
+                waiting_vehicles = [v for v in pile.charge_queue if v != pile.connected_vehicle]
+            else:
+                waiting_vehicles = list(pile.charge_queue)
+                
+            # 清空队列，准备重新分配
+            pile.charge_queue.clear()
+            
+            # 添加到等待分配的车辆列表
+            all_waiting_vehicles.extend(waiting_vehicles)
+            
+        # 添加恢复的充电桩到可用充电桩列表
+        same_type_piles[recovered_pile_id] = recovered_pile
+            
+        # 按照排队号码排序（如果有）
+        if all_waiting_vehicles and 'queue_number' in all_waiting_vehicles[0]:
+            all_waiting_vehicles.sort(
+                key=lambda v: int(v.get('queue_number', '0')[1:]) 
+                if v.get('queue_number', '0') and v.get('queue_number', '0')[1:].isdigit() 
+                else 0
+            )
+            
+        # 重新分配车辆到充电桩
+        rescheduled_vehicles = []
+        for vehicle in all_waiting_vehicles:
+            # 寻找队列最短的充电桩
+            target_pile_id = min(
+                same_type_piles.keys(), 
+                key=lambda pid: len(same_type_piles[pid].charge_queue)
+            )
+            target_pile = same_type_piles[target_pile_id]
+            
+            # 将车辆添加到目标充电桩的队列中
+            result = target_pile.join_queue(vehicle)
+            
+            # 记录调度结果
+            if not isinstance(result, dict) or 'error' not in result:
+                rescheduled_vehicles.append({
+                    "vehicle": vehicle,
+                    "target_pile": target_pile_id
+                })
+            else:
+                print(f"调度车辆失败: {result.get('error', '未知错误')}")
+                
+        return {
+            "status": True,
+            "msg": f"充电桩{recovered_pile_id}恢复后，已完成{len(rescheduled_vehicles)}辆车的重新调度",
+            "data": {
+                "recovered_pile_id": recovered_pile_id,
+                "rescheduled_vehicles": rescheduled_vehicles
+            }
+        }

@@ -1,6 +1,10 @@
 from flask import Flask,jsonify
 from flask_cors import CORS
 from src.component import User, Server
+from init_db import check_and_create_database
+
+# 检查并初始化数据库
+check_and_create_database()
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)

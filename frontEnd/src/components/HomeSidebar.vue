@@ -195,10 +195,6 @@
           />
         </a-form-item>
 
-        <div class="charging-info" v-if="queueForm.chargingAmount">
-          <p>预计充电时间：{{ calculateChargingTime }} 分钟</p>
-          <p>预计等待时间：{{ calculateWaitingTime }} 分钟</p>
-        </div>
       </a-form>
     </a-modal>
 

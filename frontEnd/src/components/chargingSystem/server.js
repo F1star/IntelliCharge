@@ -108,6 +108,99 @@ export const useChargingServer = defineStore("chargingServer", () => {
         return res.data;
     };
 
+    /**
+     * 获取充电详单列表
+     * @param {string} username - 可选，按用户名筛选
+     * @returns {Promise<{status: boolean, msg: string, data: Array}>}
+     */
+    const getChargingBills = async (username) => {
+        const params = username ? { username } : {};
+        const res = await serverApi.get("bills", { params });
+        return res.data;
+    };
+
+    /**
+     * 启动/关闭充电桩（管理员）
+     * @param {string} pileId - 充电桩ID
+     * @param {string} action - 操作类型：'start' 或 'stop'
+     * @returns {Promise<{status: boolean, msg: string, data: Object}>}
+     */
+    const toggleChargingPile = async (pileId, action) => {
+        const res = await serverApi.post("admin/pile/toggle", {
+            pile_id: pileId,
+            action
+        });
+        return res.data;
+    };
+
+    /**
+     * 获取充电桩详细状态（管理员）
+     * @returns {Promise<{status: boolean, msg: string, data: Object}>}
+     */
+    const getAdminPileStatus = async () => {
+        const res = await serverApi.get("admin/pile/status");
+        return res.data;
+    };
+
+    /**
+     * 获取等候服务的车辆信息（管理员）
+     * @returns {Promise<{status: boolean, msg: string, data: Array}>}
+     */
+    const getWaitingVehicles = async () => {
+        const res = await serverApi.get("admin/queue/waiting");
+        return res.data;
+    };
+
+    /**
+     * 获取充电报表数据（管理员）
+     * @param {string} type - 报表类型：'day', 'week', 'month'
+     * @param {string} startDate - 可选，开始日期
+     * @returns {Promise<{status: boolean, msg: string, data: Array}>}
+     */
+    const getChargingReports = async (type = 'day', startDate = null) => {
+        const params = { type };
+        if (startDate) {
+            params.start_date = startDate;
+        }
+        const res = await serverApi.get("admin/reports", { params });
+        return res.data;
+    };
+
+    /**
+     * 设置充电桩故障（管理员）
+     * @param {string} pileId - 充电桩ID
+     * @param {string} scheduleStrategy - 调度策略：'priority'（优先级调度）或'time_order'（时间顺序调度）
+     * @returns {Promise<{status: boolean, msg: string, data: Object}>}
+     */
+    const setPileFault = async (pileId, scheduleStrategy = 'priority') => {
+        try {
+            const res = await serverApi.post("admin/pile/fault", {
+                pile_id: pileId,
+                schedule_strategy: scheduleStrategy
+            });
+            return res.data;
+        } catch (error) {
+            console.error("设置充电桩故障API错误:", error);
+            return {
+                status: false,
+                msg: error.response?.data?.msg || "设置充电桩故障请求失败",
+                data: null
+            };
+        }
+    };
+
+    /**
+     * 修复充电桩故障（管理员）
+     * @param {string} pileId - 充电桩ID
+     * @returns {Promise<{status: boolean, msg: string, data: Object}>}
+     */
+    const repairPile = async (pileId) => {
+        const res = await serverApi.post("admin/pile/repair", {
+            pile_id: pileId
+        });
+        return res.data;
+    };
+
     return {
         getQueueStatus,
         getPileStatus,
@@ -116,6 +209,14 @@ export const useChargingServer = defineStore("chargingServer", () => {
         modifyCharging,
         stopCharging,
         changeChargeMode,
-        cancelCharging
+        cancelCharging,
+        getChargingBills,
+        // 管理员API
+        toggleChargingPile,
+        getAdminPileStatus,
+        getWaitingVehicles,
+        getChargingReports,
+        setPileFault,
+        repairPile
     };
 });
