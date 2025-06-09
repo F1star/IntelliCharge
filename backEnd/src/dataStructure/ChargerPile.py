@@ -95,16 +95,17 @@ class ChargingPile:
         
         return f"车辆[{vehicle_id}]已加入充电桩[{self.pile_id}]的等待队列"
 
-    def leave_queue(self, vehicle_id: str) -> Union[str, ErrorResponse]:
+    def leave_queue(self, vehicle: dict) -> Union[str, ErrorResponse]:
         """
         车辆离开充电队列
         :param vehicle_id: 车辆唯一标识
         :return: 操作结果信息
         """
-        if vehicle_id not in self.charge_queue:
+        vehicle_id = vehicle['car_id']
+        if vehicle not in self.charge_queue:
             return {"error": f"操作失败: 车辆[{vehicle_id}]不在队列中"}
         
-        self.charge_queue.remove(vehicle_id)
+        self.charge_queue.remove(vehicle)
         return f"车辆[{vehicle_id}]已离开充电桩[{self.pile_id}]的等待队列"
 
     def connect_vehicle(self, vehicle: dict) -> Union[str, ErrorResponse]:
@@ -186,6 +187,57 @@ class ChargingPile:
         return {
             "status": "success",
             "message": f"车辆[{vehicle['car_id']}]已完成充电",
+            "bill": bill
+        }
+    
+
+    def fault_vehicle(self) -> Union[Dict, ErrorResponse]:
+        """故障断开车辆连接并生成充电详单"""
+        
+        if self.start_time is None:
+            return {"error": f"系统错误: 充电桩{self.pile_id}未记录充电开始时间"}
+        
+        if not self.connected_vehicle:
+            return {"error": f"系统错误: 充电桩{self.pile_id}未连接车辆"}
+        
+        end_time = time.time()
+        start_time = self.start_time
+        charging_duration = (end_time - start_time) / 60  # 转换为分钟
+        
+        # 计算总电量和总费用（考虑分时电价）
+        energy_consumed, cost = self._calculate_charging_cost(start_time, end_time)
+        
+        # 更新统计数据
+        self.total_energy_delivered += energy_consumed
+        self.total_earnings += cost
+        
+        # 更新管理员统计信息
+        self.charging_count += 1
+        self.total_charging_duration += charging_duration
+        
+        # 生成充电详单
+        bill = create_charging_bill(
+            pile_id=self.pile_id,
+            vehicle_info=self.connected_vehicle,
+            charging_amount=energy_consumed,
+            charging_duration=charging_duration,
+            start_time=start_time,
+            end_time=end_time,
+            charging_cost=cost
+        )
+        self.charging_bills.append(bill)
+        
+        # 保存当前车辆信息用于返回
+        vehicle = self.connected_vehicle
+        
+        # 重置状态
+        self.connected_vehicle = None
+        self.start_time = None
+        self.current_charging_amount = 0.0
+        
+        return {
+            "status": "success",
+            "message": f"车辆[{vehicle['car_id']}]已完成故障断开充电",
             "bill": bill
         }
 
@@ -320,7 +372,7 @@ class ChargingPile:
         # 如果有车辆正在充电，生成充电详单并断开连接
         bill_data = None
         if original_status == ChargingStatus.CHARGING and self.connected_vehicle:
-            result = self.disconnect_vehicle()
+            result = self.fault_vehicle()
             if isinstance(result, dict) and 'bill' in result:
                 bill_data = result['bill']
                 
@@ -550,7 +602,7 @@ if __name__ == "__main__":
     print(status)  # 显示队列长度、车辆列表和当前充电车辆
 
     # 车辆离开队列
-    print(pile.leave_queue(test_vehicles[1]["car_id"]))  # 第二辆车离开队列
+    print(pile.leave_queue(test_vehicles[1]))  # 第二辆车离开队列
 
     # 查看队列状态
     status = pile.get_queue_status()
