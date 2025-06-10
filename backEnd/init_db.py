@@ -149,6 +149,13 @@ ALTER TABLE `users`
 ALTER TABLE `cars`
   ADD CONSTRAINT `cars_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE;
 COMMIT;
+
+--
+-- 添加管理员
+--
+INSERT INTO `users` (`id`, `username`, `password`, `isadmin`) VALUES
+(2, 'root', 'root123', 1)
+
         """
         
         # 执行SQL脚本中的每个语句
