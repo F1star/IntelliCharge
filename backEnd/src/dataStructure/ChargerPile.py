@@ -129,7 +129,7 @@ class ChargingPile:
         self.current_charging_amount = 0.0  # 重置当前充电量
         return f"车辆[{vehicle_id}]已成功连接充电桩[{self.pile_id}]"
     
-    def disconnect_vehicle(self) -> Union[Dict, ErrorResponse]:
+    def disconnect_vehicle(self, is_auto_end: bool = False) -> Union[Dict, ErrorResponse]:
         """断开车辆连接并生成充电详单"""
         if self.status != ChargingStatus.CHARGING:
             return {"error": f"操作失败: 充电桩{self.pile_id}未处于充电状态"}
@@ -140,7 +140,11 @@ class ChargingPile:
         if not self.connected_vehicle:
             return {"error": f"系统错误: 充电桩{self.pile_id}未连接车辆"}
         
-        end_time = time.time()
+        if is_auto_end:
+            end_time = self.start_time + self.connected_vehicle['charging_amount'] / self.power * 3600
+        else:
+            end_time = time.time()
+
         start_time = self.start_time
         charging_duration = (end_time - start_time) / 60  # 转换为分钟
         
@@ -422,6 +426,7 @@ class ChargingPile:
             "power": self.power,
             "status": self.status.value,
             "connected_vehicle": self.connected_vehicle,
+            "charge_queue": list(self.charge_queue),
             "charging_category": self.charging_category,
             "queue_length": len(self.charge_queue),
             "total_energy": round(self.total_energy_delivered, 2),
@@ -509,7 +514,7 @@ class ChargingPile:
         requested_amount = self.connected_vehicle.get('charging_amount', 0)
         if requested_amount > 0 and self.current_charging_amount >= requested_amount:
             print(f"车辆[{self.connected_vehicle['car_id']}]已达到请求充电量{requested_amount}度，自动断开")
-            return self.disconnect_vehicle()
+            return self.disconnect_vehicle(is_auto_end=True)
             
         return None
 

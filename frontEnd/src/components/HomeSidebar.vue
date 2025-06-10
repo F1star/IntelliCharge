@@ -31,6 +31,9 @@
                   <p v-if="pile.queue_length > 1">
                     等待车辆: {{ pile.queue_length - 1 }}
                   </p>
+                  <p v-if="isUserWaitingForPile(pile)">
+                    预计等待时间: {{ calculateWaitingTime(pile) }} 分钟
+                  </p>
                   <div v-if="pile.status === '充电中'" class="pile-actions">
                     <a-button 
                       type="primary" 
@@ -330,10 +333,32 @@ const filteredChargingPiles = computed(() => {
   if (isAdmin.value) {
     return chargingPiles.value
   }
-  return chargingPiles.value.filter(pile => 
-    pile.connected_vehicle && 
-    userCars.value.some(car => car.id === pile.connected_vehicle["car_id"])
-  )
+  
+  console.log('chargingPiles:', chargingPiles.value)
+  console.log('userCars:', userCars.value)
+  
+  const filtered = chargingPiles.value.filter(pile => {
+    // 检查车辆是否正在充电
+    const isCharging = pile.connected_vehicle && 
+      userCars.value.some(car => {
+        console.log('Comparing:', car.id, pile.connected_vehicle.car_id)
+        return car.id === pile.connected_vehicle.car_id
+      })
+    
+    // 检查车辆是否在队列中
+    const isInQueue = Array.from(pile.charge_queue).some(vehicle => 
+      userCars.value.some(car => {
+        console.log('Queue comparing:', car.id, vehicle.car_id)
+        return car.id === vehicle.car_id
+      })
+    )
+    
+    console.log('Pile:', pile.pile_id, 'isCharging:', isCharging, 'isInQueue:', isInQueue)
+    return isCharging || isInQueue
+  })
+  
+  console.log('Filtered piles:', filtered)
+  return filtered
 })
 
 const getPileStatusColor = (status) => {
@@ -678,6 +703,25 @@ const confirmCancel = async () => {
   } finally {
     loading.value = false
   }
+}
+
+const isUserWaitingForPile = (pile) => {
+  if (!pile.connected_vehicle) return false
+  const currentVehicle = pile.connected_vehicle
+  const userQueuePosition = queueStatus[pile.charging_category === 'F' ? 'fast_queue' : 'slow_queue']
+    .findIndex(vehicle => vehicle.vehicle_info.username === userStore.username)
+  
+  return userQueuePosition !== -1
+}
+
+const calculateWaitingTime = (pile) => {
+  if (!pile.connected_vehicle) return 0
+  
+  const chargingRate = pile.charging_category === 'F' ? 60 : 30 // 快充60度/小时，慢充30度/小时
+  const remainingAmount = pile.connected_vehicle.charging_amount - (pile.current_charging_amount || 0)
+  const remainingTime = Math.ceil((remainingAmount / chargingRate) * 60)
+  
+  return remainingTime
 }
 
 onMounted(() => {

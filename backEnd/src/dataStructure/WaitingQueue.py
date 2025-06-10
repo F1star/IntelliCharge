@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Tuple, Optional, Union
 import itertools
+import time
 
 class Queue:
     def __init__(self):
@@ -205,7 +206,8 @@ class Queue:
             queue_number = f"F{self.fast_counter}"
             self.fast_queue.append({
                 'queue_number': queue_number,
-                'vehicle_info': vehicle_info
+                'vehicle_info': vehicle_info,
+                'join_time': time.time()  # 添加加入时间
             })
             self.fast_counter += 1
             return queue_number
@@ -213,7 +215,8 @@ class Queue:
             queue_number = f"T{self.slow_counter}"
             self.slow_queue.append({
                 'queue_number': queue_number,
-                'vehicle_info': vehicle_info
+                'vehicle_info': vehicle_info,
+                'join_time': time.time()  # 添加加入时间
             })
             self.slow_counter += 1
             return queue_number
