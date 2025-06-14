@@ -8,7 +8,7 @@ class Queue:
         self.slow_queue = []  # 慢充队列
         self.fast_counter = 1  # 快充序号计数器
         self.slow_counter = 1  # 慢充序号计数器
-        self.max_capacity = 6  # 最大容量
+        self.max_capacity = 10  # 最大容量
         self.charging_piles = {}  # 充电桩信息字典
 
     def register_charging_pile(self, pile_info: Dict[str, Any]):

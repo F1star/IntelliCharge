@@ -1,6 +1,7 @@
 import threading
 import time
 from typing import Dict, List, Tuple, Any, Optional, Callable
+from datetime import datetime
 from .WaitingQueue import Queue
 from .ChargerPile import ChargingPile
 
@@ -18,6 +19,12 @@ class Scheduler:
         self.running = False
         self.scheduler_thread: Optional[threading.Thread] = None
         self.check_interval = 5  # 检查间隔（秒）
+        self.time_speedup = 1.0  # 时间加速倍数，默认为1，即正常速度
+        
+        # 模拟时间相关变量
+        self.is_using_simulated_time = False  # 是否使用模拟时间
+        self.simulation_start_real_time = time.time()  # 模拟开始的真实时间戳
+        self.simulation_start_time = time.time()  # 模拟的起始时间戳
 
     def start(self) -> None:
         """启动调度器"""
@@ -34,6 +41,96 @@ class Scheduler:
         self.running = False
         if self.scheduler_thread:
             self.scheduler_thread.join()
+            
+    def set_time_speedup(self, speedup: float) -> None:
+        """
+        设置时间加速倍数
+        :param speedup: 时间加速倍数，例如2.0表示时间流逝速度为正常的2倍
+        """
+        if speedup <= 0:
+            raise ValueError("时间加速倍数必须大于0")
+        self.time_speedup = speedup
+        
+    def set_simulation_time(self, timestamp: float) -> None:
+        """
+        设置模拟时间的起始点
+        :param timestamp: 模拟时间的起始时间戳
+        """
+        self.is_using_simulated_time = True
+        self.simulation_start_real_time = time.time()
+        self.simulation_start_time = timestamp
+        
+    def set_simulation_time_from_str(self, time_str: str) -> dict:
+        """
+        通过时间字符串设置模拟时间的起始点
+        :param time_str: 时间字符串，格式为 "HH:MM:SS" 或 "YYYY-MM-DD HH:MM:SS"
+        :return: 设置结果
+        """
+        try:
+            # 判断输入格式
+            if len(time_str) <= 8:  # 处理 "HH:MM:SS" 格式
+                # 获取今天的日期
+                today = datetime.now().strftime("%Y-%m-%d")
+                time_str = f"{today} {time_str}"
+                
+            # 将时间字符串转换为时间戳
+            dt = datetime.strptime(time_str, "%Y-%m-%d %H:%M:%S")
+            timestamp = dt.timestamp()
+            
+            self.set_simulation_time(timestamp)
+            
+            return {
+                "status": True,
+                "msg": f"模拟时间已设置为 {time_str}",
+                "data": {
+                    "timestamp": timestamp,
+                    "time_str": time_str
+                }
+            }
+        except Exception as e:
+            return {
+                "status": False,
+                "msg": f"设置模拟时间失败: {str(e)}",
+                "data": None
+            }
+    
+    def get_current_time(self) -> float:
+        """
+        获取当前时间戳，如果启用了模拟时间，则返回模拟时间戳
+        :return: 当前时间戳
+        """
+        if self.is_using_simulated_time:
+            elapsed_real_time = time.time() - self.simulation_start_real_time
+            elapsed_simulated_time = elapsed_real_time * self.time_speedup
+            return self.simulation_start_time + elapsed_simulated_time
+        else:
+            return time.time()
+            
+    def get_current_time_str(self) -> str:
+        """
+        获取当前时间的字符串表示，格式为 "YYYY-MM-DD HH:MM:SS"
+        :return: 当前时间字符串
+        """
+        current_time = self.get_current_time()
+        dt = datetime.fromtimestamp(current_time)
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+        
+    def reset_to_real_time(self) -> dict:
+        """
+        恢复使用真实系统时间，关闭模拟时间模式
+        :return: 操作结果
+        """
+        self.is_using_simulated_time = False
+        self.simulation_start_real_time = time.time()
+        self.simulation_start_time = time.time()
+        
+        return {
+            "status": True,
+            "msg": "已恢复使用实时系统时间",
+            "data": {
+                "current_time": self.get_current_time_str()
+            }
+        }
 
     def _scheduler_loop(self) -> None:
         """调度器主循环"""

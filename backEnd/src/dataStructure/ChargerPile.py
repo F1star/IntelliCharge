@@ -505,9 +505,16 @@ class ChargingPile:
         if self.status != ChargingStatus.CHARGING or not self.connected_vehicle or self.start_time is None:
             return None
             
-        # 计算当前已充电量
-        current_time = time.time()
-        elapsed_time = (current_time - float(self.start_time)) / 3600.0  # 转换为小时
+        # 使用调度器的时间函数，自动考虑时间加速和模拟时间
+        from ..component.Server.controller import scheduler
+            
+        current_time = scheduler.get_current_time()  # 获取当前模拟时间
+        
+        # 计算充电时长
+        if isinstance(self.start_time, (int, float)):  # 确保start_time是数值类型
+            elapsed_time = (current_time - self.start_time) / 3600.0  # 转换为小时
+        else:
+            elapsed_time = 0.0
         self.current_charging_amount = self.power * elapsed_time
         
         # 检查是否达到请求充电量
@@ -567,9 +574,14 @@ class ChargingPile:
         if self.status != ChargingStatus.CHARGING or not self.connected_vehicle or self.start_time is None:
             return 0.0
             
-        # 计算当前已充电量
-        current_time = time.time()
-        elapsed_time = (current_time - float(self.start_time)) / 3600.0  # 转换为小时
+        # 计算当前已充电量，使用调度器的时间函数
+        from ..component.Server.controller import scheduler
+        current_time = scheduler.get_current_time()  # 获取当前模拟时间
+        
+        if isinstance(self.start_time, (int, float)):  # 确保start_time是数值类型
+            elapsed_time = (current_time - self.start_time) / 3600.0  # 转换为小时
+        else:
+            elapsed_time = 0.0
         return self.power * elapsed_time
 
 if __name__ == "__main__":

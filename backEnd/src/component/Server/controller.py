@@ -77,10 +77,9 @@ waiting_queue = Queue()
 charging_piles = {
     'A': ChargingPile('A', 'F'),  # 快充桩A
     'B': ChargingPile('B', 'F'),  # 快充桩B
-    'C': ChargingPile('C', 'F'),  # 快充桩C
-    'D': ChargingPile('D', 'T'),  # 慢充桩D
-    'E': ChargingPile('E', 'T'),  # 慢充桩E
-    'F': ChargingPile('F', 'T'),  # 慢充桩F
+    'D': ChargingPile('C', 'T'),  # 慢充桩C
+    'E': ChargingPile('D', 'T'),  # 慢充桩D
+    'F': ChargingPile('E', 'T'),  # 慢充桩E
 }
 
 # 注册充电桩信息到队列
@@ -849,6 +848,88 @@ async def repair_pile():
         return jsonify({
             "status": False,
             "msg": f"修复充电桩故障失败: {str(e)}",
+            "data": None
+        })
+
+@blueprint.route('/admin/time_speedup', methods=['POST'])
+async def set_time_speedup():
+    """设置时间加速倍数"""
+    data = request.get_json()
+    speedup = data.get('speedup', 1.0)
+    
+    try:
+        speedup = float(speedup)
+        if speedup <= 0:
+            return jsonify({
+                "status": False,
+                "msg": "时间加速倍数必须大于0",
+                "data": None
+            })
+            
+        scheduler.set_time_speedup(speedup)
+        
+        return jsonify({
+            "status": True,
+            "msg": f"时间加速倍数已设置为{speedup}",
+            "data": {"speedup": speedup}
+        })
+    except ValueError:
+        return jsonify({
+            "status": False,
+            "msg": "无效的时间加速倍数",
+            "data": None
+        })
+
+@blueprint.route('/admin/set_time', methods=['POST'])
+async def set_simulation_time():
+    """设置模拟系统时间"""
+    data = request.get_json()
+    time_str = data.get('time_str', '')
+    
+    if not time_str:
+        return jsonify({
+            "status": False,
+            "msg": "请提供有效的时间字符串",
+            "data": None
+        })
+    
+    result = scheduler.set_simulation_time_from_str(time_str)
+    return jsonify(result)
+
+@blueprint.route('/admin/get_time', methods=['GET'])
+async def get_simulation_time():
+    """获取当前模拟系统时间"""
+    try:
+        current_time = scheduler.get_current_time()
+        current_time_str = scheduler.get_current_time_str()
+        
+        return jsonify({
+            "status": True,
+            "msg": "获取当前系统时间成功",
+            "data": {
+                "timestamp": current_time,
+                "time_str": current_time_str,
+                "is_using_simulated_time": scheduler.is_using_simulated_time,
+                "time_speedup": scheduler.time_speedup
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            "status": False,
+            "msg": f"获取系统时间失败: {str(e)}",
+            "data": None
+        })
+        
+@blueprint.route('/admin/reset_time', methods=['POST'])
+async def reset_to_real_time():
+    """恢复使用实时系统时间"""
+    try:
+        result = scheduler.reset_to_real_time()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({
+            "status": False,
+            "msg": f"恢复实时系统时间失败: {str(e)}",
             "data": None
         })
 
