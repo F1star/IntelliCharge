@@ -200,7 +200,7 @@ export const useChargingServer = defineStore("chargingServer", () => {
         });
         return res.data;
     };
-    
+
     /**
      * 设置时间加速倍数（管理员）
      * @param {number} speedup - 时间加速倍数，例如 10 表示时间流逝速度为正常的10倍

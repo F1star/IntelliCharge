@@ -19,15 +19,15 @@
               <car-outlined />
               <span>等候车辆信息</span>
             </a-menu-item>
-                      <a-menu-item key="reports">
-            <bar-chart-outlined />
-            <span>充电报表</span>
-          </a-menu-item>
+            <a-menu-item key="reports">
+              <bar-chart-outlined />
+              <span>充电报表</span>
+            </a-menu-item>
           <a-menu-item key="time-control">
             <dashboard-outlined />
             <span>时间控制面板</span>
           </a-menu-item>
-        </a-menu>
+          </a-menu>
         </a-layout-sider>
         <a-layout-content class="content">
           <!-- 充电桩状态 -->

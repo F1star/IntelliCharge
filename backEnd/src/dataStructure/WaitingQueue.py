@@ -62,12 +62,23 @@ class Queue:
         # 获取可用的快充和慢充充电桩
         fast_piles = [pile for pile in self.charging_piles.values() 
                      if pile['charging_category'] == 'F' and pile['available_slots'] > 0]
+        # 获取快充电桩空位的数量
+        fast_empty_slots = sum(pile['available_slots'] for pile in fast_piles)
         slow_piles = [pile for pile in self.charging_piles.values() 
                      if pile['charging_category'] == 'T' and pile['available_slots'] > 0]
+        # 获取慢充电桩空位的数量
+        slow_empty_slots = sum(pile['available_slots'] for pile in slow_piles)
 
-        # 获取待调度的车辆（按照先来后到原则）
-        fast_vehicles = self.fast_queue[:len(fast_piles)]
-        slow_vehicles = self.slow_queue[:len(slow_piles)]
+        # 如果快充电桩空位的数量大于等于整个系统快充电桩数目，则在等候队列中获取小于等于该数目的快充请求的车辆
+        if fast_empty_slots >= 2:
+            fast_vehicles = self.fast_queue[:fast_empty_slots]
+        else:
+            fast_vehicles = []
+        # 如果慢充电桩空位的数量大于等于系统慢充电桩数目，则在等候队列中获取小于等于该数目的慢充请求的车辆
+        if slow_empty_slots >= 3:
+            slow_vehicles = self.slow_queue[:slow_empty_slots]
+        else:
+            slow_vehicles = []
 
         # 执行调度
         fast_allocation = self._allocate_vehicles(fast_vehicles, fast_piles)
@@ -204,19 +215,25 @@ class Queue:
 
         if charge_type == 'F':
             queue_number = f"F{self.fast_counter}"
+            # 使用调度器的时间函数，自动考虑时间加速和模拟时间
+            from ..component.Server.controller import scheduler
+            
             self.fast_queue.append({
                 'queue_number': queue_number,
                 'vehicle_info': vehicle_info,
-                'join_time': time.time()  # 添加加入时间
+                'join_time': scheduler.get_current_time()  # 添加加入时间，使用调度器时间
             })
             self.fast_counter += 1
             return queue_number
         elif charge_type == 'T':
             queue_number = f"T{self.slow_counter}"
+            # 导入调度器用于获取正确的时间
+            from ..component.Server.controller import scheduler
+            
             self.slow_queue.append({
                 'queue_number': queue_number,
                 'vehicle_info': vehicle_info,
-                'join_time': time.time()  # 添加加入时间
+                'join_time': scheduler.get_current_time()  # 添加加入时间，使用调度器时间
             })
             self.slow_counter += 1
             return queue_number

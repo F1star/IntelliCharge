@@ -49,7 +49,20 @@ class Scheduler:
         """
         if speedup <= 0:
             raise ValueError("时间加速倍数必须大于0")
-        self.time_speedup = speedup
+            
+        # 如果使用模拟时间，先计算当前的模拟时间点
+        if self.is_using_simulated_time:
+            current_simulated_time = self.get_current_time()
+            
+            # 更新时间加速倍数
+            self.time_speedup = speedup
+            
+            # 重置模拟时间的基准点，以保持当前模拟时间不变
+            self.simulation_start_real_time = time.time()
+            self.simulation_start_time = current_simulated_time
+        else:
+            # 如果不使用模拟时间，直接设置加速倍数
+            self.time_speedup = speedup
         
     def set_simulation_time(self, timestamp: float) -> None:
         """

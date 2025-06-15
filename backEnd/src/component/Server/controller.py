@@ -77,9 +77,9 @@ waiting_queue = Queue()
 charging_piles = {
     'A': ChargingPile('A', 'F'),  # 快充桩A
     'B': ChargingPile('B', 'F'),  # 快充桩B
-    'D': ChargingPile('C', 'T'),  # 慢充桩C
-    'E': ChargingPile('D', 'T'),  # 慢充桩D
-    'F': ChargingPile('E', 'T'),  # 慢充桩E
+    'C': ChargingPile('C', 'T'),  # 慢充桩C
+    'D': ChargingPile('D', 'T'),  # 慢充桩D
+    'E': ChargingPile('E', 'T'),  # 慢充桩E
 }
 
 # 注册充电桩信息到队列
@@ -652,8 +652,8 @@ async def get_waiting_vehicles():
         
         # 处理快充队列
         for vehicle in queue_status['fast_queue']:
-            # 计算排队时长（分钟）
-            queue_time = (time.time() - vehicle['join_time']) / 60
+            # 计算排队时长（分钟）使用调度器时间
+            queue_time = (scheduler.get_current_time() - vehicle['join_time']) / 60
             
             waiting_vehicles.append({
                 'queue_number': vehicle['queue_number'],
@@ -667,8 +667,8 @@ async def get_waiting_vehicles():
             
         # 处理慢充队列
         for vehicle in queue_status['slow_queue']:
-            # 计算排队时长（分钟）
-            queue_time = (time.time() - vehicle['join_time']) / 60
+            # 计算排队时长（分钟）使用调度器时间
+            queue_time = (scheduler.get_current_time() - vehicle['join_time']) / 60
             
             waiting_vehicles.append({
                 'queue_number': vehicle['queue_number'],

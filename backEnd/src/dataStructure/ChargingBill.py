@@ -41,9 +41,12 @@ def create_charging_bill(
     service_cost = round(charging_amount * 0.8, 2)
     total_cost = round(charging_cost + service_cost, 2)
 
+    # 获取调度器以使用正确的时间（实时或模拟）
+    from ..component.Server.controller import scheduler
+    
     return {
         'bill_id': str(uuid.uuid4()),
-        'create_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'create_time': scheduler.get_current_time_str(),  # 使用调度器的时间
         'pile_id': pile_id,
         'vehicle_id': vehicle_info['car_id'],
         'username': vehicle_info['username'],
