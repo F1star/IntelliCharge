@@ -37,13 +37,16 @@ def create_charging_bill(
     :param charging_cost: 充电费用
     :return: 充电详单
     """
-    # 计算服务费用（充电费用的10%）
-    service_cost = round(charging_cost * 0.1, 2)
+    # 计算服务费用（0.8元/度）
+    service_cost = round(charging_amount * 0.8, 2)
     total_cost = round(charging_cost + service_cost, 2)
 
+    # 获取调度器以使用正确的时间（实时或模拟）
+    from ..component.Server.controller import scheduler
+    
     return {
         'bill_id': str(uuid.uuid4()),
-        'create_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'create_time': scheduler.get_current_time_str(),  # 使用调度器的时间
         'pile_id': pile_id,
         'vehicle_id': vehicle_info['car_id'],
         'username': vehicle_info['username'],

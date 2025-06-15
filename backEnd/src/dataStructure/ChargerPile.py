@@ -1,6 +1,6 @@
 import time
 from enum import Enum
-from typing import Dict, TypedDict, Any, Union, List, Optional
+from typing import Dict, TypedDict, Any, Union, List, Optional, cast
 from datetime import datetime, time as dt_time
 from collections import deque
 from .ChargingBill import create_charging_bill
@@ -44,7 +44,7 @@ class ChargingPile:
 
         self.status = ChargingStatus.IDLE
         self.connected_vehicle = None
-        self.start_time = None
+        self.start_time: Optional[float] = None
         self.total_energy_delivered = 0.0
         self.total_earnings = 0.0
         self.charge_queue = deque(maxlen=2)
@@ -123,10 +123,20 @@ class ChargingPile:
         if self.charge_queue[0] != vehicle:
             return {"error": f"操作失败: 车辆[{vehicle_id}]不是队列中的第一辆车"}
         
+        # 使用调度器的时间函数，自动考虑时间加速和模拟时间
+        from ..component.Server.controller import scheduler
+        
         self.connected_vehicle = vehicle
         self.status = ChargingStatus.CHARGING
-        self.start_time = time.time()
-        self.current_charging_amount = 0.0  # 重置当前充电量
+        self.start_time = scheduler.get_current_time()  # 使用调度器的时间
+        
+        # 考虑已充电的电量
+        if 'already_charged_amount' in vehicle and vehicle['already_charged_amount'] > 0:
+            self.current_charging_amount = vehicle['already_charged_amount']
+            print(f"车辆[{vehicle_id}]连接充电桩[{self.pile_id}]，考虑已充电量{self.current_charging_amount}度")
+        else:
+            self.current_charging_amount = 0.0  # 重置当前充电量
+            
         return f"车辆[{vehicle_id}]已成功连接充电桩[{self.pile_id}]"
     
     def disconnect_vehicle(self, is_auto_end: bool = False) -> Union[Dict, ErrorResponse]:
@@ -140,30 +150,48 @@ class ChargingPile:
         if not self.connected_vehicle:
             return {"error": f"系统错误: 充电桩{self.pile_id}未连接车辆"}
         
+        # 使用调度器的时间函数，自动考虑时间加速和模拟时间
+        from ..component.Server.controller import scheduler
+        
+        # 保证 start_time 不为 None
+        if self.start_time is None:
+            self.start_time = scheduler.get_current_time()
+        
         if is_auto_end:
             end_time = self.start_time + self.connected_vehicle['charging_amount'] / self.power * 3600
         else:
-            end_time = time.time()
+            end_time = scheduler.get_current_time()  # 使用调度器的时间
 
-        start_time = self.start_time
+        start_time = cast(float, self.start_time)  # 明确告诉类型检查器 start_time 是 float
         charging_duration = (end_time - start_time) / 60  # 转换为分钟
         
         # 计算总电量和总费用（考虑分时电价）
-        energy_consumed, cost = self._calculate_charging_cost(start_time, end_time)
+        this_session_energy, cost = self._calculate_charging_cost(start_time, end_time)
         
-        # 更新统计数据
-        self.total_energy_delivered += energy_consumed
+        # 获取已充电电量（如果有）
+        already_charged_amount = self.connected_vehicle.get('already_charged_amount', 0.0)
+        
+        # 计算这次会话实际充电量（扣除已充电部分）
+        actual_energy_consumed = max(0, this_session_energy - already_charged_amount)
+        
+        # 更新统计数据（只考虑本次会话的充电量）
+        self.total_energy_delivered += actual_energy_consumed
         self.total_earnings += cost
         
         # 更新管理员统计信息
         self.charging_count += 1
         self.total_charging_duration += charging_duration
         
+        # 计算最终的充电电量（本次充电加上已充电量）
+        total_energy = this_session_energy
+        if already_charged_amount > 0:
+            print(f"车辆[{self.connected_vehicle['car_id']}]本次充电{this_session_energy}度，已有充电量{already_charged_amount}度，总计{total_energy}度")
+        
         # 生成充电详单
         bill = create_charging_bill(
             pile_id=self.pile_id,
             vehicle_info=self.connected_vehicle,
-            charging_amount=energy_consumed,
+            charging_amount=total_energy,
             charging_duration=charging_duration,
             start_time=start_time,
             end_time=end_time,
@@ -173,6 +201,10 @@ class ChargingPile:
         
         # 保存当前车辆信息用于返回
         vehicle = self.connected_vehicle
+        
+        # 清除车辆已充电量信息，避免下次重复计算
+        if 'already_charged_amount' in vehicle:
+            del vehicle['already_charged_amount']
         
         # 重置状态
         self.connected_vehicle = None
@@ -204,26 +236,44 @@ class ChargingPile:
         if not self.connected_vehicle:
             return {"error": f"系统错误: 充电桩{self.pile_id}未连接车辆"}
         
-        end_time = time.time()
-        start_time = self.start_time
+        # 使用调度器的时间函数，自动考虑时间加速和模拟时间
+        from ..component.Server.controller import scheduler
+        
+        # 保证 start_time 不为 None
+        if self.start_time is None:
+            self.start_time = scheduler.get_current_time()
+            
+        end_time = scheduler.get_current_time()  # 使用调度器的时间
+        start_time = cast(float, self.start_time)  # 明确告诉类型检查器 start_time 是 float
         charging_duration = (end_time - start_time) / 60  # 转换为分钟
         
         # 计算总电量和总费用（考虑分时电价）
-        energy_consumed, cost = self._calculate_charging_cost(start_time, end_time)
+        this_session_energy, cost = self._calculate_charging_cost(start_time, end_time)
+        
+        # 获取已充电电量（如果有）
+        already_charged_amount = self.connected_vehicle.get('already_charged_amount', 0.0)
+        
+        # 计算这次会话实际充电量（扣除已充电部分）
+        actual_energy_consumed = max(0, this_session_energy - already_charged_amount)
         
         # 更新统计数据
-        self.total_energy_delivered += energy_consumed
+        self.total_energy_delivered += actual_energy_consumed
         self.total_earnings += cost
         
         # 更新管理员统计信息
         self.charging_count += 1
         self.total_charging_duration += charging_duration
         
+        # 计算最终的充电电量
+        total_energy = this_session_energy
+        if already_charged_amount > 0:
+            print(f"车辆[{self.connected_vehicle['car_id']}]故障断开：本次充电{this_session_energy}度，已有充电量{already_charged_amount}度，总计{total_energy}度")
+        
         # 生成充电详单
         bill = create_charging_bill(
             pile_id=self.pile_id,
             vehicle_info=self.connected_vehicle,
-            charging_amount=energy_consumed,
+            charging_amount=total_energy,
             charging_duration=charging_duration,
             start_time=start_time,
             end_time=end_time,
@@ -233,6 +283,9 @@ class ChargingPile:
         
         # 保存当前车辆信息用于返回
         vehicle = self.connected_vehicle
+        
+        # 注意：不在这里清除已充电量信息，因为车辆将被重新调度
+        # 已充电量信息将在set_fault方法中更新后保留在车辆信息中
         
         # 重置状态
         self.connected_vehicle = None
@@ -376,6 +429,21 @@ class ChargingPile:
         # 如果有车辆正在充电，生成充电详单并断开连接
         bill_data = None
         if original_status == ChargingStatus.CHARGING and self.connected_vehicle:
+            # 计算当前已充电的电量
+            from ..component.Server.controller import scheduler
+            current_time = scheduler.get_current_time()
+            if self.start_time is not None:
+                elapsed_time = (current_time - self.start_time) / 3600.0  # 转换为小时
+                charged_amount = self.power * elapsed_time
+                
+                # 将已充电量保存到车辆信息中
+                if 'already_charged_amount' in self.connected_vehicle:
+                    self.connected_vehicle['already_charged_amount'] += charged_amount
+                else:
+                    self.connected_vehicle['already_charged_amount'] = charged_amount
+                
+                print(f"车辆[{self.connected_vehicle['car_id']}]在故障前已充电{charged_amount}度，总计已充电{self.connected_vehicle['already_charged_amount']}度")
+            
             result = self.fault_vehicle()
             if isinstance(result, dict) and 'bill' in result:
                 bill_data = result['bill']
@@ -505,10 +573,24 @@ class ChargingPile:
         if self.status != ChargingStatus.CHARGING or not self.connected_vehicle or self.start_time is None:
             return None
             
-        # 计算当前已充电量
-        current_time = time.time()
-        elapsed_time = (current_time - float(self.start_time)) / 3600.0  # 转换为小时
-        self.current_charging_amount = self.power * elapsed_time
+        # 使用调度器的时间函数，自动考虑时间加速和模拟时间
+        from ..component.Server.controller import scheduler
+            
+        current_time = scheduler.get_current_time()  # 获取当前模拟时间
+        
+        # 计算充电时长
+        if isinstance(self.start_time, (int, float)):  # 确保start_time是数值类型
+            elapsed_time = (current_time - self.start_time) / 3600.0  # 转换为小时
+        else:
+            elapsed_time = 0.0
+            
+        # 计算本次充电的电量
+        current_session_amount = self.power * elapsed_time
+        
+        # 更新当前充电量（考虑已充电的电量）
+        self.current_charging_amount = current_session_amount
+        if 'already_charged_amount' in self.connected_vehicle and self.connected_vehicle['already_charged_amount'] > 0:
+            self.current_charging_amount += self.connected_vehicle['already_charged_amount']
         
         # 检查是否达到请求充电量
         requested_amount = self.connected_vehicle.get('charging_amount', 0)
@@ -530,9 +612,15 @@ class ChargingPile:
         if not self.connected_vehicle:
             return {"error": f"操作失败: 充电桩{self.pile_id}未连接车辆"}
         
-        # 计算当前已充电量
-        current_time = time.time()
-        elapsed_time = (current_time - self.start_time) / 3600.0  # 转换为小时
+        # 计算当前已充电量，使用调度器的时间函数
+        from ..component.Server.controller import scheduler
+        current_time = scheduler.get_current_time()  # 获取当前模拟时间
+        
+        # 保证 start_time 不为 None
+        if self.start_time is None:
+            self.start_time = current_time
+            
+        elapsed_time = (current_time - cast(float, self.start_time)) / 3600.0  # 转换为小时
         self.current_charging_amount = self.power * elapsed_time
         
         # 如果新的充电量小于已充电量，则直接断开充电
@@ -567,9 +655,14 @@ class ChargingPile:
         if self.status != ChargingStatus.CHARGING or not self.connected_vehicle or self.start_time is None:
             return 0.0
             
-        # 计算当前已充电量
-        current_time = time.time()
-        elapsed_time = (current_time - float(self.start_time)) / 3600.0  # 转换为小时
+        # 计算当前已充电量，使用调度器的时间函数
+        from ..component.Server.controller import scheduler
+        current_time = scheduler.get_current_time()  # 获取当前模拟时间
+        
+        if isinstance(self.start_time, (int, float)):  # 确保start_time是数值类型
+            elapsed_time = (current_time - self.start_time) / 3600.0  # 转换为小时
+        else:
+            elapsed_time = 0.0
         return self.power * elapsed_time
 
 if __name__ == "__main__":

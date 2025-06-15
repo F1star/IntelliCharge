@@ -201,6 +201,48 @@ export const useChargingServer = defineStore("chargingServer", () => {
         return res.data;
     };
 
+    /**
+     * 设置时间加速倍数（管理员）
+     * @param {number} speedup - 时间加速倍数，例如 10 表示时间流逝速度为正常的10倍
+     * @returns {Promise<{status: boolean, msg: string, data: Object}>}
+     */
+    const setTimeSpeedup = async (speedup) => {
+        const res = await serverApi.post("admin/time_speedup", {
+            speedup
+        });
+        return res.data;
+    };
+    
+    /**
+     * 设置模拟时间（管理员）
+     * @param {string} timeStr - 时间字符串，格式为 "HH:MM:SS" 或 "YYYY-MM-DD HH:MM:SS"
+     * @returns {Promise<{status: boolean, msg: string, data: Object}>}
+     */
+    const setSimulationTime = async (timeStr) => {
+        const res = await serverApi.post("admin/set_time", {
+            time_str: timeStr
+        });
+        return res.data;
+    };
+    
+    /**
+     * 获取当前系统时间（管理员）
+     * @returns {Promise<{status: boolean, msg: string, data: Object}>}
+     */
+    const getSystemTime = async () => {
+        const res = await serverApi.get("admin/get_time");
+        return res.data;
+    };
+    
+    /**
+     * 恢复使用实时系统时间（管理员）
+     * @returns {Promise<{status: boolean, msg: string, data: Object}>}
+     */
+    const resetToRealTime = async () => {
+        const res = await serverApi.post("admin/reset_time");
+        return res.data;
+    };
+
     return {
         getQueueStatus,
         getPileStatus,
@@ -217,6 +259,10 @@ export const useChargingServer = defineStore("chargingServer", () => {
         getWaitingVehicles,
         getChargingReports,
         setPileFault,
-        repairPile
+        repairPile,
+        setTimeSpeedup,
+        setSimulationTime,
+        getSystemTime,
+        resetToRealTime
     };
 });
