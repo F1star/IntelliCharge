@@ -1242,7 +1242,7 @@ def main():
             logger.info("设置时间为07:30:00")
             # 点击7:30:00时间按钮
             time_730_button = wait.until(
-                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[6]/div[2]/div[2]/button[1]'))
+                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[6]/div[2]/div[1]/button[4]'))
             )
             click_element(driver, time_730_button)
             time.sleep(1)
@@ -1517,7 +1517,7 @@ def main():
             logger.info("设置时间为08:30:00")
             # 点击8:30:00时间按钮
             time_830_button = wait.until(
-                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[6]/div[2]/div[2]/button[1]'))
+                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[6]/div[2]/div[2]/button[2]'))
             )
             click_element(driver, time_830_button)
             time.sleep(1)
@@ -1792,7 +1792,7 @@ def main():
             logger.info("设置时间为09:30:00")
             # 点击9:30:00时间按钮
             time_930_button = wait.until(
-                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[6]/div[2]/div[2]/button[1]'))
+                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[6]/div[2]/div[2]/button[4]'))
             )
             click_element(driver, time_930_button)
             time.sleep(1)
