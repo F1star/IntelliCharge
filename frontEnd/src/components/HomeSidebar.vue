@@ -26,8 +26,14 @@
                   <p>类型: {{ pile.charging_category === 'F' ? '快充' : '慢充' }}</p>
                   <p>功率: {{ pile.power }}kW</p>
                   <p v-if="pile.connected_vehicle">
-                    当前车辆: {{ pile.connected_vehicle }}
+                    当前车辆: {{ typeof pile.connected_vehicle === 'object' ? pile.connected_vehicle.car_id : pile.connected_vehicle }}
                   </p>
+                  <template v-if="pile.status === '充电中'">
+                    <p>已充电量: {{ pile.current_charging_amount }} 度</p>
+                    <p>当前电费: {{ pile.current_charging_cost }} 元</p>
+                    <p>当前服务费: {{ pile.current_service_cost }} 元</p>
+                    <p>当前总费用: {{ pile.current_total_cost }} 元</p>
+                  </template>
                   <p v-if="pile.queue_length > 1">
                     等待车辆: {{ pile.queue_length - 1 }}
                   </p>

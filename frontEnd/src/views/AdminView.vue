@@ -313,6 +313,36 @@ const pileStatusColumns = [
     customRender: ({ text }) => text === 'F' ? '快充' : '慢充' },
   { title: '当前状态', dataIndex: 'status', key: 'status' },
   { title: '工作状态', dataIndex: 'is_working', key: 'is_working' },
+  { 
+    title: '充电中车辆', 
+    dataIndex: 'charging_vehicle_id', 
+    key: 'charging_vehicle_id',
+    customRender: ({ text }) => text || '无'
+  },
+  { 
+    title: '已充电量(度)', 
+    dataIndex: 'current_charging_amount', 
+    key: 'current_charging_amount',
+    customRender: ({ text, record }) => record.status === '充电中' ? text : '-'
+  },
+  { 
+    title: '当前电费(元)', 
+    dataIndex: 'current_charging_cost', 
+    key: 'current_charging_cost',
+    customRender: ({ text, record }) => record.status === '充电中' ? text : '-'
+  },
+  { 
+    title: '当前服务费(元)', 
+    dataIndex: 'current_service_cost', 
+    key: 'current_service_cost',
+    customRender: ({ text, record }) => record.status === '充电中' ? text : '-'
+  },
+  { 
+    title: '当前总费用(元)', 
+    dataIndex: 'current_total_cost', 
+    key: 'current_total_cost',
+    customRender: ({ text, record }) => record.status === '充电中' ? text : '-'
+  },
   { title: '累计充电次数', dataIndex: 'charging_count', key: 'charging_count' },
   { title: '累计充电时长(小时)', dataIndex: 'total_charging_duration', key: 'total_charging_duration' },
   { title: '累计充电电量(度)', dataIndex: 'total_energy_delivered', key: 'total_energy_delivered' },

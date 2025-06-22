@@ -30,7 +30,9 @@ logger = logging.getLogger(__name__)
 
 # 创建截图目录
 screenshot_dir = "screenshots"
+screenshot_a_dir = "screenshots_a"
 os.makedirs(screenshot_dir, exist_ok=True)
+os.makedirs(screenshot_a_dir, exist_ok=True)
 
 def take_screenshot(driver, name):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -40,6 +42,15 @@ def take_screenshot(driver, name):
         logger.info(f"截图已保存到: {filepath}")
     except Exception as e:
         logger.error(f"保存截图失败: {e}")
+        
+def take_screenshot_a(driver, name):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filepath = os.path.join("screenshots_a", f"{name}_{timestamp}.png")
+    try:
+        driver.save_screenshot(filepath)
+        logger.info(f"半小时截图已保存到: {filepath}")
+    except Exception as e:
+        logger.error(f"保存半小时截图失败: {e}")
 
 def click_element(driver, element):
     try:
@@ -1213,10 +1224,72 @@ def main():
             logger.info("已设置时间加速为60倍速")
             take_screenshot(driver, "time_speedup_set_after_user3")
             time.sleep(5)  # 等待一段时间让时间加速生效
+
+            # 等待时间接近7:30
+            logger.info("等待时间接近7:30")
+            time.sleep(15)  # 假设60倍速下，15秒实际时间约为15分钟系统时间
             
+            # 取消时间加速，恢复正常速度
+            normal_speed_button = wait.until(
+                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[4]/div[2]/div/button[1]'))
+            )
+            click_element(driver, normal_speed_button)
+            logger.info("已恢复正常速度")
+            take_screenshot(driver, "normal_speed_set_before_8")
+            time.sleep(1)
+            
+            # 设置时间到7:30:00
+            logger.info("设置时间为07:30:00")
+            # 点击7:30:00时间按钮
+            time_730_button = wait.until(
+                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[6]/div[2]/div[2]/button[1]'))
+            )
+            click_element(driver, time_730_button)
+            time.sleep(1)
+            
+            # 点击设置系统时间按钮
+            set_time_button = wait.until(
+                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[6]/div[1]/div[2]/div/div/div/div/button'))
+            )
+            click_element(driver, set_time_button)
+            logger.info("已设置系统时间为07:30:00")
+            take_screenshot(driver, "time_set_to_0730")
+            time.sleep(2)
+            
+            # 切换到充电桩状态页面查看状态
+            pile_status_menu = wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'充电桩状态')]"))
+            )
+            click_element(driver, pile_status_menu)
+            # 点击刷新按钮
+            refresh_button = wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'refresh-button')]"))
+            )
+            click_element(driver, refresh_button)
+            time.sleep(2)
+            logger.info("已切换到充电桩状态页面")
+            take_screenshot(driver, "pile_status_at_0730")
+            time.sleep(2)
+            
+            # 切换到时间控制面板
+            time_control_menu = wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'时间控制面板')]"))
+            )
+            click_element(driver, time_control_menu)
+            time.sleep(1)
+            
+            # 设置为60倍速
+            speedup_button = wait.until(
+                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[4]/div[2]/div/button[3]'))
+            )
+            click_element(driver, speedup_button)
+            logger.info("已设置时间加速为60倍速")
+            take_screenshot(driver, "time_speedup_set_after_user3")
+            time.sleep(5)  # 等待一段时间让时间加速生效
+
             # 等待时间接近8:00
             logger.info("等待时间接近8:00")
-            time.sleep(45)  # 假设60倍速下，45秒实际时间约为45分钟系统时间
+            time.sleep(15)  # 假设60倍速下，15秒实际时间约为15分钟系统时间
             
             # 取消时间加速，恢复正常速度
             normal_speed_button = wait.until(
@@ -1427,9 +1500,71 @@ def main():
             take_screenshot(driver, "time_speedup_set_after_user3")
             time.sleep(5)  # 等待一段时间让时间加速生效
             
-            # 等待时间接近9:00
+            # 等待时间接近8:30
+            logger.info("等待时间接近8:30")
+            time.sleep(15)  # 假设60倍速下，15秒实际时间约为15分钟系统时间
+            
+            # 取消时间加速，恢复正常速度
+            normal_speed_button = wait.until(
+                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[4]/div[2]/div/button[1]'))
+            )
+            click_element(driver, normal_speed_button)
+            logger.info("已恢复正常速度")
+            take_screenshot(driver, "normal_speed_set_before_8")
+            time.sleep(1)
+            
+            # 设置时间到8:30:00
+            logger.info("设置时间为08:30:00")
+            # 点击8:30:00时间按钮
+            time_830_button = wait.until(
+                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[6]/div[2]/div[2]/button[1]'))
+            )
+            click_element(driver, time_830_button)
+            time.sleep(1)
+            
+            # 点击设置系统时间按钮
+            set_time_button = wait.until(
+                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[6]/div[1]/div[2]/div/div/div/div/button'))
+            )
+            click_element(driver, set_time_button)
+            logger.info("已设置系统时间为08:30:00")
+            take_screenshot(driver, "time_set_to_0830")
+            time.sleep(2)
+            
+            # 切换到充电桩状态页面查看状态
+            pile_status_menu = wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'充电桩状态')]"))
+            )
+            click_element(driver, pile_status_menu)
+            # 点击刷新按钮
+            refresh_button = wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'refresh-button')]"))
+            )
+            click_element(driver, refresh_button)
+            time.sleep(2)
+            logger.info("已切换到充电桩状态页面")
+            take_screenshot(driver, "pile_status_at_0830")
+            time.sleep(2)
+            
+            # 切换到时间控制面板
+            time_control_menu = wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'时间控制面板')]"))
+            )
+            click_element(driver, time_control_menu)
+            time.sleep(1)
+            
+            # 设置为60倍速
+            speedup_button = wait.until(
+                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[4]/div[2]/div/button[3]'))
+            )
+            click_element(driver, speedup_button)
+            logger.info("已设置时间加速为60倍速")
+            take_screenshot(driver, "time_speedup_set_after_user3")
+            time.sleep(5)  # 等待一段时间让时间加速生效
+
+            # 等待时间接近  9:00
             logger.info("等待时间接近9:00")
-            time.sleep(45)  # 假设60倍速下，45秒实际时间约为45分钟系统时间
+            time.sleep(15)  # 假设60倍速下，15秒实际时间约为15分钟系统时间
             
             # 取消时间加速，恢复正常速度
             normal_speed_button = wait.until(
@@ -1640,9 +1775,71 @@ def main():
             take_screenshot(driver, "time_speedup_set_after_user3")
             time.sleep(5)  # 等待一段时间让时间加速生效
             
-            # 等待时间接近9:00
-            logger.info("等待时间接近9:00")
-            time.sleep(45)  # 假设60倍速下，45秒实际时间约为45分钟系统时间
+            # 等待时间接近9:30
+            logger.info("等待时间接近9:30")
+            time.sleep(15)  # 假设60倍速下，15秒实际时间约为15分钟系统时间
+            
+            # 取消时间加速，恢复正常速度
+            normal_speed_button = wait.until(
+                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[4]/div[2]/div/button[1]'))
+            )
+            click_element(driver, normal_speed_button)
+            logger.info("已恢复正常速度")
+            take_screenshot(driver, "normal_speed_set_before_8")
+            time.sleep(1)
+            
+            # 设置时间到9:30:00
+            logger.info("设置时间为09:30:00")
+            # 点击9:30:00时间按钮
+            time_930_button = wait.until(
+                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[6]/div[2]/div[2]/button[1]'))
+            )
+            click_element(driver, time_930_button)
+            time.sleep(1)
+            
+            # 点击设置系统时间按钮
+            set_time_button = wait.until(
+                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[6]/div[1]/div[2]/div/div/div/div/button'))
+            )
+            click_element(driver, set_time_button)
+            logger.info("已设置系统时间为09:30:00")
+            take_screenshot(driver, "time_set_to_0930")
+            time.sleep(2)
+            
+            # 切换到充电桩状态页面查看状态
+            pile_status_menu = wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'充电桩状态')]"))
+            )
+            click_element(driver, pile_status_menu)
+            # 点击刷新按钮
+            refresh_button = wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'refresh-button')]"))
+            )
+            click_element(driver, refresh_button)
+            time.sleep(2)
+            logger.info("已切换到充电桩状态页面")
+            take_screenshot(driver, "pile_status_at_0930")
+            time.sleep(2)
+            
+            # 切换到时间控制面板
+            time_control_menu = wait.until(
+                EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'时间控制面板')]"))
+            )
+            click_element(driver, time_control_menu)
+            time.sleep(1)
+            
+            # 设置为60倍速
+            speedup_button = wait.until(
+                EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[4]/div[2]/div/button[3]'))
+            )
+            click_element(driver, speedup_button)
+            logger.info("已设置时间加速为60倍速")
+            take_screenshot(driver, "time_speedup_set_after_user3")
+            time.sleep(5)  # 等待一段时间让时间加速生效
+
+            # 等待时间接近10:00
+            logger.info("等待时间接近10:00")
+            time.sleep(15)  # 假设60倍速下，15秒实际时间约为15分钟系统时间
             
             # 取消时间加速，恢复正常速度
             normal_speed_button = wait.until(
@@ -1687,7 +1884,7 @@ def main():
             time.sleep(2)
 
             # 设置T2充电桩故障
-            t2_fault_button = driver.find_element(By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div/div/div/div/div/div/div/table/tbody/tr[4]/td[9]/div/div[2]/button')
+            t2_fault_button = driver.find_element(By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div/div/div/div/div/div/div/table/tbody/tr[4]/td[14]/div/div[2]/button')
             click_element(driver, t2_fault_button)
             time.sleep(2)
             take_screenshot(driver, "t2_pile_set_fault")
@@ -1788,7 +1985,7 @@ def main():
             
         try:
             # 修复T2充电桩
-            t2_repair_button = driver.find_element(By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div/div/div/div/div/div/div/table/tbody/tr[4]/td[9]/div/div/button')
+            t2_repair_button = driver.find_element(By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div/div/div/div/div/div/div/table/tbody/tr[4]/td[14]/div/div/button')
             click_element(driver, t2_repair_button)
             logger.info("已修复T2充电桩故障")
             time.sleep(2)

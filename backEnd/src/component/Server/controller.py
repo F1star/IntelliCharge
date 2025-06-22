@@ -197,6 +197,29 @@ async def get_pile_status():
             current_charging_amount = pile.get_current_charging_amount()
             pile_status['current_charging_amount'] = round(current_charging_amount, 2)
             
+            # 添加当前充电费用信息（如果正在充电）
+            if pile.status == ChargingStatus.CHARGING and pile.connected_vehicle is not None and pile.start_time is not None:
+                # 计算当前费用
+                from_time = pile.start_time 
+                to_time = scheduler.get_current_time()
+                
+                # 计算当前费用
+                _, current_charging_cost = pile._calculate_charging_cost(from_time, to_time)
+                
+                # 计算服务费（0.8元/度）
+                current_service_cost = round(current_charging_amount * 0.8, 2)
+                
+                # 计算总费用（充电费 + 服务费）
+                current_total_cost = round(current_charging_cost + current_service_cost, 2)
+                
+                pile_status['current_charging_cost'] = round(current_charging_cost, 2)
+                pile_status['current_service_cost'] = current_service_cost
+                pile_status['current_total_cost'] = current_total_cost
+            else:
+                pile_status['current_charging_cost'] = 0
+                pile_status['current_service_cost'] = 0
+                pile_status['current_total_cost'] = 0
+            
             status[pile_id] = pile_status
             
         return jsonify({
@@ -624,6 +647,43 @@ async def get_admin_pile_status():
                 'total_earnings': round(pile.total_earnings, 2),
                 'is_working': pile.status != ChargingStatus.OFFLINE and pile.status != ChargingStatus.FAULT
             })
+            
+            # 添加当前充电车辆信息
+            if pile.status == ChargingStatus.CHARGING and pile.connected_vehicle is not None:
+                # 获取当前充电量
+                current_charging_amount = pile.get_current_charging_amount()
+                
+                # 计算当前费用
+                # 获取当前和开始时间
+                from_time = pile.start_time if pile.start_time is not None else scheduler.get_current_time()
+                to_time = scheduler.get_current_time()
+                
+                # 计算当前费用
+                _, current_charging_cost = pile._calculate_charging_cost(from_time, to_time)
+                
+                # 计算服务费（0.8元/度）
+                current_service_cost = round(current_charging_amount * 0.8, 2)
+                
+                # 计算总费用（充电费 + 服务费）
+                current_total_cost = round(current_charging_cost + current_service_cost, 2)
+                
+                car_id = pile.connected_vehicle.get('car_id', '未知车辆')
+                
+                pile_status.update({
+                    'charging_vehicle_id': car_id,
+                    'current_charging_amount': round(current_charging_amount, 2),
+                    'current_charging_cost': round(current_charging_cost, 2),
+                    'current_service_cost': current_service_cost,
+                    'current_total_cost': current_total_cost
+                })
+            else:
+                pile_status.update({
+                    'charging_vehicle_id': None,
+                    'current_charging_amount': 0,
+                    'current_charging_cost': 0,
+                    'current_service_cost': 0,
+                    'current_total_cost': 0
+                })
             
             status[pile_id] = pile_status
             
