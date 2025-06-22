@@ -271,6 +271,29 @@ def set_time_and_submit_request(driver, wait, time_str, user_idx, charge_mode, c
         take_screenshot(driver, "admin_refresh_pile_status_failed")
 
 
+def empty_operation(driver, wait, time_sleep):
+    # 切换到时间控制面板
+    time_control_menu = wait.until(
+        EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'时间控制面板')]"))
+    )
+    click_element(driver, time_control_menu)
+    # 设置为60倍速
+    speedup_button = wait.until(
+        EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[4]/div[2]/div/button[3]'))
+    )
+    click_element(driver, speedup_button)
+    logger.info("已设置时间加速为60倍速")
+    
+    time.sleep(time_sleep)
+
+    # 取消时间加速，恢复正常速度
+    normal_speed_button = wait.until(
+        EC.element_to_be_clickable((By.XPATH, '//*[@id="app"]/div/section/section/main/div/div/div[4]/div[2]/div/button[1]'))
+    )
+    click_element(driver, normal_speed_button)
+    logger.info("已恢复正常速度")
+
+
 def main():
     # 配置Edge选项
     options = Options()
@@ -500,6 +523,9 @@ def main():
         )
         click_element(driver, refresh_button)
         take_screenshot(driver, "pile_status_at_0745")
+
+        # 10分钟空闲
+        empty_operation(driver, wait, 10)
         
         # 8:00:00 (A,V21,F,60)
         set_time_and_submit_request(driver, wait, "08:00:00", 21, "F", 60)
@@ -541,6 +567,9 @@ def main():
         click_element(driver, refresh_button)
         take_screenshot(driver, "pile_status_at_0815")
         
+        # 45分钟空闲
+        empty_operation(driver, wait, 45)
+
         # 9:05:00 - 无事件
         driver.switch_to.window(driver.window_handles[0])
         logger.info("设置时间为09:05:00")
@@ -574,6 +603,9 @@ def main():
         )
         click_element(driver, refresh_button)
         take_screenshot(driver, "pile_status_at_0905")
+
+        # 50分钟空闲
+        empty_operation(driver, wait, 50)
         
         # 10:00:00 (A,V23,T,14)
         set_time_and_submit_request(driver, wait, "10:00:00", 23, "T", 14)
