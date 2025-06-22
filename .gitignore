@@ -1,3 +1,6 @@
 node_modules
 *.pyc
 venv/
+screenshots/
+*.log
+screenshots_a/

@@ -4,7 +4,7 @@
       <template #title>
         <div class="card-title">
           <span>充电站状态</span>
-          <a-button type="primary" @click="refreshQueueStatus">
+          <a-button type="primary" class="refresh-button" @click="refreshQueueStatus">
             <template #icon><reload-outlined /></template>
             刷新
           </a-button>
@@ -320,7 +320,7 @@ const queueRules = {
 }
 
 const isQueueFull = computed(() => {
-  return queueStatus.total_vehicles >= 6
+  return queueStatus.total_vehicles >= 10
 })
 
 const selectedCar = computed(() => {
@@ -850,5 +850,9 @@ onMounted(() => {
 .queue-vehicle-actions {
   display: flex;
   gap: 4px;
+}
+
+.refresh-button {
+  margin-bottom: 16px;
 }
 </style>

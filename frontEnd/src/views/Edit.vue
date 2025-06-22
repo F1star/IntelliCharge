@@ -27,7 +27,10 @@
         <div v-if="activeSidebar === 'personal'" class="sidebar-content">
           <PersonalSidebar />
         </div>
-        <div v-else :style="editorStyle">
+        <div v-if="activeSidebar === 'bills'" class="sidebar-content">
+          <BillsSidebar />
+        </div>
+        <div v-else class="sidebar-content">
           <HomeSidebar/>
         </div>
       </a-layout-content>
@@ -46,6 +49,7 @@ import { message, TypographyText } from 'ant-design-vue';
 
 import PersonalSidebar from '../components/PersonalSidebar.vue';
 import HomeSidebar from '../components/HomeSidebar.vue';
+import BillsSidebar from '../views/Billview.vue';
 
 const router = useRouter();
 const userStore = mainStore();
@@ -87,7 +91,8 @@ const showPersonalSidebar = () => {
 };
 
 const goToBills = () => {
-  router.push({ name: 'bills' });
+  activeSidebar.value = 'bills';
+  selectedKeys.value = ['3'];
 };
 
 const goToAdmin = () => {
